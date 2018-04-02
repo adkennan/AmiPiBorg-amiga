@@ -1,0 +1,10 @@
+#pragma libcall AmiPiBorgBase APB_AllocConnection 1e 90803
+#pragma libcall AmiPiBorgBase APB_FreeConnection 24 801
+#pragma libcall AmiPiBorgBase APB_OpenConnection 2a 801
+#pragma libcall AmiPiBorgBase APB_CloseConnection 30 801
+#pragma libcall AmiPiBorgBase APB_ConnectionState 36 801
+#pragma libcall AmiPiBorgBase APB_AllocRequest 3c 801
+#pragma libcall AmiPiBorgBase APB_FreeRequest 42 801
+#pragma libcall AmiPiBorgBase APB_Read 48 801
+#pragma libcall AmiPiBorgBase APB_Write 4e 801
+#pragma libcall AmiPiBorgBase APB_Abort 54 801

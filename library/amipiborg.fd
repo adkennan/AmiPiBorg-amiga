@@ -1,0 +1,14 @@
+##base _AmiPiBorgBase
+##bias 30
+##public
+APB_AllocConnection(port,handlerId,memoryPool)(a0,d0,a1)
+APB_FreeConnection(connection)(a0)
+APB_OpenConnection(connection)(a0)
+APB_CloseConnection(connection)(a0)
+APB_ConnectionState(connection)(a0)
+APB_AllocRequest(connection)(a0)
+APB_FreeRequest(request)(a0)
+APB_Read(request)(a0)
+APB_Write(request)(a0)
+APB_Abort(request)(a0)
+##end
