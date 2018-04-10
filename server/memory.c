@@ -6,6 +6,8 @@
 
 #include <clib/exec_protos.h>
 
+#include <stdio.h>
+
 #ifdef APB_DEBUG_MEM
 #include <stdio.h>
 #endif
@@ -94,3 +96,13 @@ VOID APB_FreeMem(MemoryPool pool, VOID *memory, ULONG size)
 
     APB_MemDecrementStats((LONG)size);
 }
+
+APTR APB_PointerAdd(APTR ptr, LONG amt)
+{
+	if( ptr == 0 ) {
+		printf("Access to NULL pointer.\n");
+	}
+
+	return (APTR)(((BYTE*)ptr) + amt);
+}
+

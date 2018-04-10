@@ -8,6 +8,7 @@
 #include "packetreader.h"
 #include "remote.h"
 #include "connection.h"
+#include "stats.h"
 
 #include "amipiborg.h"
 
@@ -216,7 +217,9 @@ VOID APB_SrvSendToRemote(struct Server *srv)
     }
 
     buf = APB_DequeueBuffer(srv->srv_PacketWriter);
-    
+
+    APB_IncrementStat(ST_BYTES_SENT, buf->b_Offset);            
+
     APB_SendToRemote(srv->srv_Remote, buf);
 }
 
@@ -302,13 +305,21 @@ VOID APB_RequestResend(struct Server *srv, UWORD currPackId)
 VOID APB_HandlePacket(struct Server *srv, struct PacketRef *pr)
 {
     Connection cnn;
+	UWORD ix;
 
-    if( !(pr->pr_Flags & PF_RESEND) && pr->pr_PackId - 1 != srv->srv_LastInPackId ) {
-        printf("Expecting packet %d, got %d\n", srv->srv_LastInPackId + 1, pr->pr_PackId);
-        APB_RequestResend(srv, pr->pr_PackId);
-    }
-    srv->srv_LastInPackId = pr->pr_PackId;
-
+    if( !(pr->pr_Flags & PF_RESEND) ) {
+		if( pr->pr_PackId - 1 > srv->srv_LastInPackId ) {
+        	printf("Expecting packet %d, got %d\n", srv->srv_LastInPackId + 1, pr->pr_PackId);
+			
+			for( ix = srv->srv_LastInPackId + 1; ix < pr->pr_PackId; ix++ ) {
+			    APB_RequestResend(srv, ix);
+			}
+    	}
+		
+    	srv->srv_LastInPackId = pr->pr_PackId;
+	} else {
+		printf("Received resent packet %d\n", pr->pr_PackId);
+	}
 
     if( pr->pr_ConnId == DEFAULT_CONNECTION ) {
         APB_HandleControlPacket(srv, pr); 

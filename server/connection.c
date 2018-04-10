@@ -1,7 +1,7 @@
 
 #include "connection.h"
 #include "protocol.h"
-
+#include "memory.h"
 #include "stats.h"
 
 #include "amipiborg.h"
@@ -135,12 +135,14 @@ VOID APB_PushToRemote(struct Connection *c, struct APBRequest *req)
         p->pac_ConnId = c->cnn_Id;
         p->pac_Type = PT_DATA;
 
-        dest = ((BYTE *)p) + sizeof(struct Packet);
+        dest = APB_PointerAdd(p, sizeof(struct Packet));
 
         CopyMem(req->r_Data, dest, req->r_Length);
 
         req->r_State = APB_RS_OK;
         req->r_Actual = req->r_Length;
+
+//		printf("Send data packet for %d\n", c->cnn_Id);
     }
 }
 
@@ -149,6 +151,7 @@ VOID APB_PushToClient(struct Connection *c)
     struct APBRequest *r;
     struct PacketRef *p;
     UWORD toCopy;
+	BYTE *dest;
 
     while( ! IsListEmpty(PAC_LIST(c)) && ! IsListEmpty(REQ_LIST(c)) ) {
 
@@ -169,7 +172,10 @@ VOID APB_PushToClient(struct Connection *c)
 			CopyMem(p->pr_Data1, r->r_Data, p->pr_Data1Length);
 				
 			if( p->pr_Data2Length > 0 ) {
-				CopyMem(p->pr_Data2, (BYTE *)r->r_Data + p->pr_Data1Length, p->pr_Data2Length);
+				printf("A: Copy %d bytes to %ld\n", p->pr_Data1Length, r->r_Data);
+				dest = APB_PointerAdd(r->r_Data, p->pr_Data1Length);
+				printf("B: Copy %d bytes to %ld\n", p->pr_Data2Length, dest);
+				CopyMem(p->pr_Data2, dest, p->pr_Data2Length);
 			}
 
 			r->r_State = APB_RS_OK;
@@ -232,6 +238,7 @@ VOID APB_HandleConnectionPacket(Connection cnn, struct PacketRef *pr)
 			if( c->cnn_State >= CS_DISCONNECTING ) {
 				releasePacket = TRUE;
 			} else {
+				printf("Got data packet for %d\n", c->cnn_Id);
 	            AddTail(PAC_LIST(c), (struct Node *)pr);
     	        APB_PushToClient(c);
 			}

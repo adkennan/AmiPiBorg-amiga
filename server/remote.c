@@ -61,8 +61,9 @@ struct Buffer *APB_GetReadBuffer(struct Remote *r, UWORD *length)
         }
         printf("Allocated read buffer\n");
         r->r_ReadBuffer = buf;
-    } else if( *length > BUFFER_SIZE - buf->b_Offset ) {
-    
+    }
+
+	if( *length > BUFFER_SIZE - buf->b_Offset ) {
         *length = BUFFER_SIZE - buf->b_Offset;
     }
 
@@ -81,7 +82,7 @@ VOID APB_BeginRead(struct Remote *r)
     
     req->IOSer.io_Command = CMD_READ;
     req->IOSer.io_Length = 1;
-    req->IOSer.io_Data = buf->b_Data + buf->b_Offset;
+    req->IOSer.io_Data = APB_PointerAdd(buf->b_Data, buf->b_Offset);
 
     SendIO((struct IORequest *)req);
 }
@@ -91,9 +92,6 @@ VOID APB_ContinueRead(struct Remote *r)
     struct Buffer *buf;
     struct IOExtSer *req = r->r_ReadReq;
     UWORD size;
-//    UWORD ix;
-
-//    printf("> 0x%02x", r->r_ReadBuffer->b_Data[r->r_ReadBuffer->b_Offset]);
 
     r->r_ReadBuffer->b_Offset++;
 
@@ -113,18 +111,11 @@ VOID APB_ContinueRead(struct Remote *r)
 
     req->IOSer.io_Command = CMD_READ;
     req->IOSer.io_Length = size;
-    req->IOSer.io_Data = buf->b_Data + buf->b_Offset;
+    req->IOSer.io_Data = APB_PointerAdd(buf->b_Data, buf->b_Offset);
 
     DoIO((struct IORequest *)req);
 
-//    for( ix = 0; ix < req->IOSer.io_Actual; ix++ ) {
-//        printf(" 0x%02x", buf->b_Data[buf->b_Offset + ix]);
-//    }
-//    printf("\n");
-
     buf->b_Offset += size;
-
-    APB_IncrementStat(ST_BYTES_RECEIVED, size + 1);            
 }
 
 
@@ -268,9 +259,7 @@ VOID APB_HandleSignal(Remote remote, ULONG sigBits)
 
         WaitIO((struct IORequest *)r->r_WriteReq);
         if( r->r_WriteBuffer ) {
-
-            APB_IncrementStat(ST_BYTES_SENT, r->r_WriteBuffer->b_Offset);            
-           
+         
             APB_ReleaseBuffer(r->r_WriteBuffer);
             r->r_WriteBuffer = NULL;
         }

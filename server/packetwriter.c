@@ -2,6 +2,7 @@
 #include "packetwriter.h"
 #include "buffer.h"
 #include "stats.h"
+#include "memory.h"
 
 #include <exec/lists.h>
 
@@ -111,7 +112,7 @@ struct Packet *APB_AllocPacketWithId(PacketWriter packetWriter, UWORD length, UW
     buf = pw->pw_Buf;
 
     if( !buf // No current buffer
-        || length > BUFFER_SIZE - buf->b_Offset ) // No room left in buffer
+        || (buf->b_Offset + length + 1) >= BUFFER_SIZE ) // No room left in buffer
 
     {
         if( ! (buf = APB_AllocateBuffer(pw->pw_ObjPool) ) ) {
@@ -127,7 +128,7 @@ struct Packet *APB_AllocPacketWithId(PacketWriter packetWriter, UWORD length, UW
         APB_IncrementStat(ST_Q_OUTGOING_SIZE, 1);
     }
 
-    p = (struct Packet *)&buf->b_Data[buf->b_Offset];
+    p = (struct Packet *)APB_PointerAdd(buf->b_Data, buf->b_Offset);
 
     p->pac_Id = PACKET_ID;
     p->pac_PackId = packId;

@@ -14,5 +14,7 @@ VOID *APB_AllocMem(MemoryPool pool, ULONG size);
 
 VOID APB_FreeMem(MemoryPool pool, VOID *memory, ULONG size);
 
+APTR APB_PointerAdd(APTR ptr, LONG amt);
+
 #endif // __APB_MEMORY_H__
 

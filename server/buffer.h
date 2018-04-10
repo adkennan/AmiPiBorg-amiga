@@ -6,7 +6,7 @@
 
 #include "objectpool.h"
 
-#define BUFFER_SIZE 4096
+#define BUFFER_SIZE 256
 #define MIN_BUFFERS 8
 #define MAX_BUFFERS 16
 

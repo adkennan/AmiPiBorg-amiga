@@ -32,13 +32,14 @@ int main(int argc, char **argv)
     struct MsgPort *port;
     ULONG sig;
     struct Message *msg;
-    ULONG repeat = 5, count = 0;
+    ULONG repeat = 5, count = 0, len, actual;
     
     if( argc > 1 ) {
         writeBuf = argv[1];
     } else {
         writeBuf = "Ping!";
     }
+	len = strlen(writeBuf);
 
     if( argc > 2 ) {
         repeat = atol(argv[2]);
@@ -62,7 +63,7 @@ int main(int argc, char **argv)
                         if( writer = APB_AllocRequest(conn) ) {
 
                             writer->r_Data = writeBuf;
-                            writer->r_Length = strlen(writeBuf);
+                            writer->r_Length = len;
 
                             printf("Sending %s\n", writer->r_Data);
 
@@ -97,8 +98,17 @@ int main(int argc, char **argv)
 												continue;
 											}
 
-                                            readBuf[reader->r_Actual] = 0;
-                                            printf("%d: Received %d bytes: %s\n", count, reader->r_Actual, reader->r_Data);
+											actual = reader->r_Actual > len 
+														? len
+														: reader->r_Actual;
+                                            readBuf[actual] = 0;
+											if( actual != writer->r_Length ) {
+												printf("Expected %ld bytes, got %ld.\n", len, actual);
+											}
+											if( strncmp(writeBuf, readBuf, actual) != 0 ) {
+												printf("!!! Read bytes differ !!!\n");		
+											}
+                                            printf("%d: Received %d bytes: %s\n", count, reader->r_Actual, readBuf);
 
                                             Delay(50);
 

@@ -2,6 +2,7 @@
 #include "packetreader.h"
 #include "buffer.h"
 #include "stats.h"
+#include "memory.h"
 
 #include <clib/exec_protos.h>
 #include <clib/alib_protos.h>
@@ -31,7 +32,10 @@ struct PacketReader
 
 #define PACK_BR(packRef) ((struct BufferRef *)packRef->pr_BufRef)
 
-#define TO_PACKET(br, offset) ((struct Packet *)(&br->br_Buf->b_Data[offset]))
+#define TO_PACKET(br, offset) (((struct Packet *)APB_PointerAdd(br->br_Buf->b_Data, offset)))
+#define TO_DATA1(pa) (APB_PointerAdd(pa, sizeof(struct Packet)))
+
+#define BUF_BYTES(br) (br->br_Buf->b_Offset)
 
 
 // Packet Reader
@@ -65,7 +69,7 @@ VOID APB_ReleaseBufferRef(struct BufferRef *br)
 {
     APB_ReleaseBuffer(br->br_Buf);
 
-    APB_FreeObject(br->br_Reader, OT_BUFFER_REF, br);
+    APB_FreeObject(br->br_Reader->pr_ObjPool, OT_BUFFER_REF, br);
 
     APB_IncrementStat(ST_BR_ALLOCATED, -1);
 }
@@ -119,18 +123,15 @@ BOOL APB_AppendBuffer(struct PacketReader *pr, struct Buffer *buf)
         }
 
         if( pr->pr_BufRef == NULL ) {
-            //printf("New head bufref\n");
             pr->pr_BufRef = br;
     
         } else {
-            //printf("Added to tail\n");
             br2 = pr->pr_BufRef;    
             while(br2->br_Next != NULL) {
                 br2 = br2->br_Next;
             }
             br2->br_CanRelease = TRUE;
             br2->br_Next = br;
-
         }              
     }
 
@@ -141,14 +142,14 @@ VOID APB_ProcessBuffer(PacketReader packetReader, struct Buffer *buf)
 {
     struct PacketReader *pr = (struct PacketReader *)packetReader;
 
-    struct BufferRef *br, *headBr = NULL;
+    struct BufferRef *br, *headBr;
     struct PacketRef *p;
     struct Packet    *pa;
-    ULONG             id = 0;
+    ULONG             id;
     WORD              offset, bytesLeft;
-    UWORD             packId = 0, connId = 0, packLen1 = 0, packLen2;
-    UBYTE             packType = 0, packFlags = 0;
-    UBYTE            *packData1 = NULL, *packData2;
+    UWORD             packId, connId, packLen1, packLen2;
+    UBYTE             packType, packFlags;
+    UBYTE            *packData1, *packData2;
 
     if( ! APB_AppendBuffer(pr, buf) ) {
         return;
@@ -158,73 +159,65 @@ VOID APB_ProcessBuffer(PacketReader packetReader, struct Buffer *buf)
 
     offset = br->br_Offset;
 
-        while( br != NULL && offset <= br->br_Buf->b_Offset ) {
+        while( br != NULL && offset <= BUF_BYTES(br) ) {
 
-            //printf("Looking for packet at %d\n", offset);
+			packLen2 = 0;
+			packData2 = 0;
+            headBr = br;
 
             pa = TO_PACKET(br, offset);    
 
-            bytesLeft = br->br_Buf->b_Offset - offset;
+            bytesLeft = BUF_BYTES(br) - offset;
             if( bytesLeft == 0 ) {
                 br = br->br_Next;
                 continue;
             }
                 
-            if( bytesLeft < sizeof(struct Packet) ) {
+            if( bytesLeft <= sizeof(struct Packet) ) {
 
                 if( br->br_Next == NULL ) {
                     // Not enough space left for a packet, and no more buffers.
-                    break;
-                }
-
-                printf("Packet split %d bytes left.\n", bytesLeft);
-
-                if( bytesLeft & 1 ) {
-                    printf("Odd number of bytes!\n");
                     return;
                 }
 
-                br->br_Offset += bytesLeft;
-
-                APB_IncrementStat(ST_PR_SPLIT_COUNT, 1);
+                printf("Packet header split %d bytes left.\n", bytesLeft);
 
                 switch(bytesLeft) {
 
-                    case 1:
-                        br = br->br_Next;
-                        offset = 0;
-                        continue;
-
                     case 2:
-                        headBr = br;
-
                         id                  = (*(UWORD *)pa) << 16;
 
                         br = br->br_Next;
+						if( BUF_BYTES(br) < sizeof(struct Packet) - bytesLeft ) {
+							return;
+						}
                         offset = -bytesLeft;
 
                         pa = TO_PACKET(br, offset);    
 
                         id                 |= *(((UWORD *)pa) + 1);
 
-                        //printf("id = %lx. expected %lx\n", id, PACKET_ID);
-
                         packType            = pa->pac_Type;
                         packFlags           = pa->pac_Flags;
                         connId              = pa->pac_ConnId;
                         packId              = pa->pac_PackId;
                         packLen1            = pa->pac_Length;           
-                        packData1           = ((UBYTE *)pa) + sizeof(struct Packet);
+                        packData1           = TO_DATA1(pa);
+
+						if( BUF_BYTES(br) + offset < packLen1 ) {
+							return;
+						}
 
                         break;
 
                     case 4:
-                        headBr = br;
-
                         id                  = pa->pac_Id;
 
                         br = br->br_Next;
-                        offset = -bytesLeft;
+                        if( BUF_BYTES(br) < sizeof(struct Packet) - bytesLeft ) {
+							return;
+						}			
+						offset = -bytesLeft;
 
                         pa = TO_PACKET(br, offset);    
 
@@ -233,18 +226,23 @@ VOID APB_ProcessBuffer(PacketReader packetReader, struct Buffer *buf)
                         connId              = pa->pac_ConnId;
                         packId              = pa->pac_PackId;
                         packLen1            = pa->pac_Length;           
-                        packData1           = ((UBYTE *)pa) + sizeof(struct Packet);
+                        packData1           = TO_DATA1(pa);
+
+						if( BUF_BYTES(br) + offset < packLen1 ) {
+							return;
+						}
 
                         break;
 
                     case 6:
-                        headBr = br;
-
                         id                  = pa->pac_Id;
                         packType            = pa->pac_Type;
                         packFlags           = pa->pac_Flags;
 
                         br = br->br_Next;
+						if( BUF_BYTES(br) < sizeof(struct Packet) - bytesLeft ) {
+							return;
+						}		
                         offset = -bytesLeft;
 
                         pa = TO_PACKET(br, offset);    
@@ -252,32 +250,42 @@ VOID APB_ProcessBuffer(PacketReader packetReader, struct Buffer *buf)
                         connId              = pa->pac_ConnId;
                         packId              = pa->pac_PackId;
                         packLen1            = pa->pac_Length;           
-                        packData1           = ((UBYTE *)pa) + sizeof(struct Packet);
+                        packData1           = TO_DATA1(pa);
+
+						if( BUF_BYTES(br) + offset < packLen1 ) {
+							return;
+						}
+
                         break;
 
     
                     case 8:
-                        headBr = br;
-
                         id                  = pa->pac_Id;
                         packType            = pa->pac_Type;
                         packFlags           = pa->pac_Flags;
                         connId              = pa->pac_ConnId;
 
                         br = br->br_Next;
+						if( BUF_BYTES(br) < sizeof(struct Packet) - bytesLeft ) {
+							return;
+						}
+
                         offset = -bytesLeft;
 
                         pa = TO_PACKET(br, offset);    
     
                         packId              = pa->pac_PackId;
                         packLen1            = pa->pac_Length;
-                        packData1           = ((UBYTE *)pa) + sizeof(struct Packet);
+                        packData1           = TO_DATA1(pa);
+
+						if( BUF_BYTES(br) + offset < packLen1 ) {
+							return;
+						}
+
                         break;
 
                     case 10:
                     case 12:
-                        headBr = br;
-
                         id                  = pa->pac_Id;
                         packType            = pa->pac_Type;
                         packFlags           = pa->pac_Flags;
@@ -285,18 +293,24 @@ VOID APB_ProcessBuffer(PacketReader packetReader, struct Buffer *buf)
                         packId              = pa->pac_PackId;
 
                         br = br->br_Next;
+						if( BUF_BYTES(br) < sizeof(struct Packet) - bytesLeft ) {
+							return;
+						}
+
                         offset = -bytesLeft;
 
                         pa = TO_PACKET(br, offset);    
                 
                         packLen1            = pa->pac_Length;
-                        packData1           = ((UBYTE *)pa) + sizeof(struct Packet);
+                        packData1           = TO_DATA1(pa);
+
+						if( BUF_BYTES(br) + offset < packLen1 ) {
+							return;
+						}
 
                         break;
 
                     case 14:
-                        headBr = br;
-
                         id                  = pa->pac_Id;
                         packType            = pa->pac_Type;
                         packFlags           = pa->pac_Flags;
@@ -305,29 +319,69 @@ VOID APB_ProcessBuffer(PacketReader packetReader, struct Buffer *buf)
                         packLen1            = pa->pac_Length;
 
                         br = br->br_Next;
+
                         offset = -bytesLeft;
                 
                         pa = TO_PACKET(br, offset);    
 
-                        packData1           = ((UBYTE *)pa) + sizeof(struct Packet);
-                        break;                                        
-                }
-            } else {
-                headBr = br;
+                        packData1           = TO_DATA1(pa);
 
+						if( BUF_BYTES(br) + offset < packLen1 ) {
+							return;
+						}
+
+                        break;                                        
+
+					default:
+						
+						printf("%d bytes. WTF?\n");
+                        br = br->br_Next;
+                        offset = 0;
+                        continue;
+                }
+
+                APB_IncrementStat(ST_PR_SPLIT_COUNT, 1);
+
+            } else {
                 id                  = pa->pac_Id;
                 packType            = pa->pac_Type;
                 packFlags           = pa->pac_Flags;
                 connId              = pa->pac_ConnId;
                 packId              = pa->pac_PackId;
                 packLen1            = pa->pac_Length;
-                packData1           = ((UBYTE *)pa) + sizeof(struct Packet);    
+                packData1           = TO_DATA1(pa);    
 
-//                printf("> ");
-//                for( ix = 0; ix < packLen1 + sizeof(struct Packet); ix++ ) {
-//                    printf(" 0x%02x", ((UBYTE *)pa)[ix]);
-//                }
-//                printf("\n");
+	            if( bytesLeft - sizeof(struct Packet) < packLen1 ) {
+
+            	    if( br->br_Next == NULL ) {
+	                    // Not enough space left for a packet, and no more buffers.
+        	            return;
+    	            }
+
+					printf("Packet data split %d bytes left, %d expected.\n", bytesLeft - sizeof(struct Packet), packLen1);
+
+                	packLen2 = (sizeof(struct Packet) + packLen1) - bytesLeft;
+            	    packLen1 = bytesLeft - sizeof(struct Packet);
+                
+        	        br = br->br_Next;
+    	            offset = -bytesLeft;
+
+	                packData2 = br->br_Buf->b_Data;
+					if( packLen1 + packLen2 > BUFFER_SIZE ) {
+						printf("Invalid packet size at %d: %d\n", offset, packLen1 + packLen2);
+						if( br->br_Offset < br->br_Buf->b_Offset ) {
+		                    br->br_Offset += 2;
+        		            continue;                
+                		}
+					}
+
+					if( BUF_BYTES(br) < packLen2 ) {
+						return;
+					}
+
+	                APB_IncrementStat(ST_PR_SPLIT_COUNT, 1);
+
+            	}
             }
 
             if( id != PACKET_ID ) {
@@ -339,28 +393,14 @@ VOID APB_ProcessBuffer(PacketReader packetReader, struct Buffer *buf)
                 break;
             }
 
-            if( bytesLeft - sizeof(struct Packet) < packLen1 ) {
-
-                if( br->br_Next == NULL ) {
-                    // Not enough space left for a packet, and no more buffers.
-                    break;
+			if( packLen1 + packLen2 > BUFFER_SIZE ) {
+				printf("Invalid packet size at %d: %d\n", offset, packLen1 + packLen2);
+				if( br->br_Offset < br->br_Buf->b_Offset ) {
+                    br->br_Offset += 2;
+                    continue;                
                 }
+			}
 
-                APB_IncrementStat(ST_PR_SPLIT_COUNT, 1);
-
-                packLen2 = (sizeof(struct Packet) + packLen1) - bytesLeft;
-                packLen1 = bytesLeft - sizeof(struct Packet);
-                
-                br = br->br_Next;
-                offset = -bytesLeft;
-
-                packData2 = br->br_Buf->b_Data;
-
-            } else {
-                packLen2 = 0;
-                packData2 = NULL;
-            }
-            
             if( ! (p = APB_AllocObject(pr->pr_ObjPool, OT_PACKET_REF) ) ) {
                 APB_IncrementStat(ST_PR_ALLOC_FAILURES, 1);
                 break;
@@ -396,21 +436,20 @@ VOID APB_ProcessBuffer(PacketReader packetReader, struct Buffer *buf)
                 offset++;
             }
 
+			if( packLen2 > 0 ) {
+				printf("offset = %d, packLen1 = %d, packLen2 = %d\n", offset, packLen1, packLen2);
+				printf("packData1 = %ld, packData2 = %ld\n", packData1, packData2);
+			}
+
+			APB_IncrementStat(ST_BYTES_RECEIVED, offset - br->br_Offset);            
+
             br->br_Offset = offset;
 
-//            if( connId != DEFAULT_CONNECTION ) {
-                //printf("Packet type %d, length %d, next read from %d.\n",
-                //    packType, packLen1 + packLen2, offset);
-//            }
-
-            if( br->br_Offset == br->br_Buf->b_Offset ) {
+            if( br->br_Offset == BUF_BYTES(br) ) {
                 br = br->br_Next;
                 offset = 0;
             }
         }
-
-        //br = br->br_Next;
-    //}    
 }
 
 VOID APB_ReleasePacketRef(struct PacketRef *p)
@@ -421,16 +460,14 @@ VOID APB_ReleasePacketRef(struct PacketRef *p)
 
     br->br_PacketCount--;
     if( br->br_PacketCount == 0 && br->br_CanRelease ) {
-        printf("A: Release buffer ref %x\n", br);
         APB_ReleaseBufferRef(br);
     }
     
     if( br = br->br_Next ) {
         br->br_PacketCount--;
         if( br->br_PacketCount == 0 && br->br_CanRelease ) {
-            printf("B: Release buffer ref %x\n", br);
             APB_ReleaseBufferRef(br);
-        }
+		}
     }
 
     APB_IncrementStat(ST_PR_ALLOCATED, -1);

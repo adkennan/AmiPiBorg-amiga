@@ -26,8 +26,8 @@ struct ObjectType {
 
 #define INST_LIST(ot) ((struct List *)&ot->ot_Instances)
 
-#define OBJ_TO_NODE(obj) (struct MinNode *)(((BYTE *)obj) - sizeof(struct MinNode))
-#define NODE_TO_OBJ(obj) (APTR)(((BYTE *)obj) + sizeof(struct MinNode))
+#define OBJ_TO_NODE(obj) (struct MinNode *)APB_PointerAdd(obj, -sizeof(struct MinNode))
+#define NODE_TO_OBJ(obj) APB_PointerAdd(obj, sizeof(struct MinNode))
 
 #define NODE_SIZE(ot) (ot->ot_Size + sizeof(struct MinNode))
 
