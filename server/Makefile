@@ -16,11 +16,11 @@ CPU=		68030
 DEF_DEBUG_MEM=define=APB_DEBUG_MEM_OFF
 DEF_DEBUG=opt
 
-C_OPTS=		noicons cpu=$(CPU) $(INC) $(DEF_DEBUG_MEM) $(DEF_DEBUG) NoChkAbort
+C_OPTS=		noicons cpu=$(CPU) $(INC) $(DEF_DEBUG_MEM) $(DEF_DEBUG) NoChkAbort 
 
-C_SOURCES=	main.c server.c stats.c memory.c objectpool.c buffer.c packetwriter.c packetreader.c remote.c connection.c
+C_SOURCES=	main.c server.c stats.c memory.c objectpool.c buffer.c packetwriter.c packetreader.c remote.c connection.c protocol.c
 	
-OBJECTS=	main.o server.o stats.o memory.o objectpool.o buffer.o packetwriter.o packetreader.o remote.o connection.o
+OBJECTS=	main.o server.o stats.o memory.o objectpool.o buffer.o packetwriter.o packetreader.o remote.o connection.o protocol.o
 
 $(EXENAME): $(OBJECTS)
    $(LINKER) WITH <<

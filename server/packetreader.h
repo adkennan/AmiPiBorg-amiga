@@ -9,23 +9,23 @@
 #include "memory.h"
 #include "objectpool.h"
 
-typedef APTR BufferRef;
+typedef APTR InBuffer;
 
 typedef APTR PacketReader;
 
-struct PacketRef
+struct InPacket
 {
-    struct MinNode       pr_Node;
-    BufferRef   	     pr_BufRef;
-    UBYTE                pr_Type;
-	UBYTE                pr_Flags;
-	UWORD                pr_ConnId;
-    UWORD				 pr_PackId;
-    UWORD                pr_Offset;
-    UWORD                pr_Data1Length;
-    UWORD                pr_Data2Length;
-    UBYTE               *pr_Data1;
-    UBYTE               *pr_Data2;
+    struct MinNode       ip_Node;
+    InBuffer	   	     ip_InBuf;
+    UBYTE                ip_Type;
+	UBYTE                ip_Flags;
+	UWORD                ip_ConnId;
+    UWORD				 ip_PackId;
+    UWORD                ip_Offset;
+    UWORD                ip_Data1Length;
+    UWORD                ip_Data2Length;
+    UBYTE               *ip_Data1;
+    UBYTE               *ip_Data2;
 };
 
 // Packet Reader
@@ -36,10 +36,10 @@ VOID APB_DestroyPacketReader(PacketReader pr);
 
 VOID APB_ProcessBuffer(PacketReader pr, struct Buffer *buf);
 
-VOID APB_ReleasePacketRef(struct PacketRef *p);
+VOID APB_ReleaseInPacket(struct InPacket *p);
 
 UWORD APB_ReaderQueueSize(PacketReader pr);
 
-struct PacketRef *APB_DequeuePacketRef(PacketReader pr);
+struct InPacket *APB_DequeueInPacket(PacketReader pr);
 
 #endif // __APB_BUFFER_H__

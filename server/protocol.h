@@ -89,5 +89,10 @@ struct HandlerDesc
 	UBYTE hd_HandlerName;
 };
 
+UWORD APB_CalculateChecksum(UWORD *data, UWORD length);
+
+ULONG APB_AddToChecksum(ULONG sum, UWORD *data, UWORD length);
+
+UWORD APB_CompleteChecksum(ULONG sum);
 
 #endif // __APB_PROTOCOL_H__

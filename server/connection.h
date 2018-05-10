@@ -13,7 +13,7 @@ typedef APTR Connection;
 
 enum ConnectionState 
 {
-    CS_CONNECTING,
+    CS_CONNECTING = 1,
     CS_CONNECTED,
     CS_DISCONNECTING,
     CS_DISCONNECTED,
@@ -26,7 +26,7 @@ VOID APB_DestroyConnection(Connection cnn);
 
 Connection APB_FindConnection(struct List *cnns, UWORD id);
 
-VOID APB_HandleConnectionPacket(Connection cnn, struct PacketRef *pr);
+VOID APB_HandleConnectionPacket(Connection cnn, struct InPacket *ip);
 
 VOID APB_HandleClientRequest(Connection cnn, struct APBRequest *req);
 

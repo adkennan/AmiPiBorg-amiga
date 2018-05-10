@@ -4,7 +4,7 @@ VERSION=	1
 REVISION=	0
 
 INC=		/include
-DIR=		/
+DIR=		/bin/
 
 
 LIBFILE=	$(LIBNAME).library

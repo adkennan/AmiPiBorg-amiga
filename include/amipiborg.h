@@ -8,7 +8,7 @@
 #define PORT_NAME "AmiPiBorg"
 
 enum RequestState {
-    APB_RS_OK,
+    APB_RS_OK = 1,
     APB_RS_FAILED,
     APB_RS_NOT_CONNECTED,
     APB_RS_NO_HANDLER,
@@ -19,7 +19,7 @@ enum RequestState {
 };
 
 enum RequestType {
-    APB_RT_OPEN,
+    APB_RT_OPEN = 1,
     APB_RT_CLOSE,
     APB_RT_READ,
     APB_RT_WRITE

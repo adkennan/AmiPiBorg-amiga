@@ -22,7 +22,6 @@ struct Remote
     struct MsgPort     *r_WritePort;
     struct IOExtSer    *r_ReadReq;
     struct IOExtSer    *r_WriteReq;
-    struct Buffer      *r_WriteBuffer;
     struct Buffer      *r_ReadBuffer;
     BOOL                r_ReadReady;
     BOOL                r_WriteReady;    
@@ -45,7 +44,6 @@ Remote APB_CreateRemote(MemoryPool memPool, ObjectPool objPool)
     r->r_ReadReady = FALSE;
     r->r_WriteReady = FALSE;
     r->r_ReadBuffer = NULL;
-    r->r_WriteBuffer = NULL;
 
     return r;
 }
@@ -59,7 +57,6 @@ struct Buffer *APB_GetReadBuffer(struct Remote *r, UWORD *length)
         if( ! ( buf = APB_AllocateBuffer(r->r_ObjPool) ) ) {
             return NULL;
         }
-        printf("Allocated read buffer\n");
         r->r_ReadBuffer = buf;
     }
 
@@ -99,7 +96,7 @@ VOID APB_ContinueRead(struct Remote *r)
 
     DoIO((struct IORequest *)req);
 
-    if( req->IOSer.io_Actual <= 1 ) {
+    if( req->IOSer.io_Actual == 0 ) {
         return;
     }
 
@@ -206,10 +203,6 @@ VOID APB_CloseRemote(Remote remote)
         APB_ReleaseBuffer(r->r_ReadBuffer);
     }
 
-    if( r->r_WriteBuffer ) {
-        APB_ReleaseBuffer(r->r_WriteBuffer);
-    }
-
     r->r_ReadPort = NULL;
     r->r_WritePort = NULL;
     r->r_ReadReq = NULL;
@@ -217,7 +210,6 @@ VOID APB_CloseRemote(Remote remote)
     r->r_ReadReady = FALSE;
     r->r_WriteReady = FALSE;
     r->r_ReadBuffer = NULL;
-    r->r_WriteBuffer = NULL;
 }
 
 VOID APB_DestroyRemote(Remote remote)
@@ -258,11 +250,6 @@ VOID APB_HandleSignal(Remote remote, ULONG sigBits)
     if( sigBits & (1 << r->r_WritePort->mp_SigBit ) ) {
 
         WaitIO((struct IORequest *)r->r_WriteReq);
-        if( r->r_WriteBuffer ) {
-         
-            APB_ReleaseBuffer(r->r_WriteBuffer);
-            r->r_WriteBuffer = NULL;
-        }
 
         r->r_WriteReady = TRUE;
     }
@@ -275,23 +262,15 @@ BOOL APB_CanSendToRemote(Remote remote)
     return r->r_WriteReady;
 }
 
-VOID APB_SendToRemote(Remote remote, struct Buffer *buf)
+VOID APB_SendToRemote(Remote remote, BYTE *data, UWORD length)
 {
     struct Remote *r = (struct Remote *)remote;
     struct IOExtSer *req = (struct IOExtSer *)r->r_WriteReq;
-//    UWORD ix;
     
     req->IOSer.io_Command = CMD_WRITE;
-    req->IOSer.io_Length = buf->b_Offset;
-    req->IOSer.io_Data = buf->b_Data;
+    req->IOSer.io_Length = length;
+    req->IOSer.io_Data = data;
 
-//    printf("< ");
-//    for( ix = 0; ix < buf->b_Offset; ix++ ) {
-//        printf(" 0x%02x", buf->b_Data[ix]);
-//    }
-//    printf("\n");
-
-    r->r_WriteBuffer = buf;
     r->r_WriteReady = FALSE;
 
     SendIO((struct IORequest *)req);

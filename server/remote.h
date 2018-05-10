@@ -23,7 +23,7 @@ VOID APB_HandleSignal(Remote remote, ULONG sigBits);
 
 BOOL APB_CanSendToRemote(Remote remote);
 
-VOID APB_SendToRemote(Remote remote, struct Buffer *buf);
+VOID APB_SendToRemote(Remote remote, BYTE *date, UWORD length);
 
 BOOL APB_CanReceiveFromRemote(Remote remote);
 

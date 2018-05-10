@@ -8,8 +8,11 @@
 
 #include <exec/lists.h>
 
+//#include <dos/dos.h>
+
 #include <clib/exec_protos.h>
 #include <clib/alib_protos.h>
+//#include <clib/dos_protos.h>
 
 #include <stdio.h>
 
@@ -41,8 +44,6 @@ VOID APB_CnnConnect(struct Connection *c)
     p->pc_HandlerId = c->cnn_HandlerId;    
 
     c->cnn_State = CS_CONNECTING;
-
-    printf("Send connect packet for %d\n", c->cnn_Id);    
 }
 
 VOID APB_CnnDisconnect(struct Connection *c)
@@ -50,6 +51,7 @@ VOID APB_CnnDisconnect(struct Connection *c)
     struct Packet *p;
 
     if( ! (p = APB_AllocPacket(c->cnn_PacketWriter, sizeof(struct Packet) ) ) ) {
+		printf("Failed to allocate packet\n");
         return;
     }
 
@@ -57,8 +59,6 @@ VOID APB_CnnDisconnect(struct Connection *c)
     p->pac_Type = PT_DISCONNECT;
 
     c->cnn_State = CS_DISCONNECTING;
-
-    printf("Send disconnect packet for %d\n", c->cnn_Id);    
 }
 
 Connection APB_CreateConnection(struct List *cnns, ObjectPool objectPool, UWORD connId, PacketWriter packetWriter)
@@ -92,34 +92,22 @@ Connection APB_CreateConnection(struct List *cnns, ObjectPool objectPool, UWORD 
 VOID APB_DestroyConnection(Connection cnn)
 {
     struct Connection *c = (struct Connection *)cnn;
-    struct APBRequest *r;
-    struct PacketRef *p;
-
-    printf("Destroy connection %d\n", c->cnn_Id);
-
+    struct InPacket *ip;
+ 
     if( c->cnn_State < CS_DISCONNECTING ) {
         APB_CnnDisconnect(c);
     }
 
-    while(!IsListEmpty(REQ_LIST(c))) {
-        r = (struct APBRequest *)RemHead(REQ_LIST(c));
-        r->r_State = APB_RS_ABORTED;
-        r->r_Actual = 0;
-        ReplyMsg((struct Message *)r);
-        printf("Aborted request %x\n", r);
-    }
-
     while(!IsListEmpty(PAC_LIST(c))) {
-        p = (struct PacketRef *)RemHead(PAC_LIST(c));
-        APB_ReleasePacketRef(p);
-        printf("Released packet %x\n", p);
+        ip = (struct InPacket *)RemHead(PAC_LIST(c));
+        APB_ReleaseInPacket(ip);
     }
 
-    Remove((struct Node *)c);
+	Remove((struct Node *)c);
 
     APB_FreeObject(c->cnn_ObjectPool, OT_CONNECTION, c);
 
-    APB_IncrementStat(ST_CNN_CURRENT, -1);
+   	APB_IncrementStat(ST_CNN_CURRENT, -1);
 }
 
 VOID APB_PushToRemote(struct Connection *c, struct APBRequest *req)
@@ -141,53 +129,53 @@ VOID APB_PushToRemote(struct Connection *c, struct APBRequest *req)
 
         req->r_State = APB_RS_OK;
         req->r_Actual = req->r_Length;
-
-//		printf("Send data packet for %d\n", c->cnn_Id);
     }
 }
 
 VOID APB_PushToClient(struct Connection *c)
 {
     struct APBRequest *r;
-    struct PacketRef *p;
+    struct InPacket *ip;
     UWORD toCopy;
 	BYTE *dest;
+
+	if( c->cnn_State != CS_CONNECTED ) {
+		return;
+	}
 
     while( ! IsListEmpty(PAC_LIST(c)) && ! IsListEmpty(REQ_LIST(c)) ) {
 
         r = (struct APBRequest *)RemHead(REQ_LIST(c));
-	    p = (struct PacketRef *)RemHead(PAC_LIST(c));
+	    ip = (struct InPacket *)RemHead(PAC_LIST(c));
     
-		toCopy = p->pr_Data1Length + p->pr_Data2Length;
+		toCopy = ip->ip_Data1Length + ip->ip_Data2Length;
 		r->r_Actual = toCopy;
 
 		if( r->r_Length < toCopy ) {
 			
 			r->r_State = APB_RS_BUFFER_TOO_SMALL;
 
-            AddHead(PAC_LIST(c), (struct Node *)p);
+            AddHead(PAC_LIST(c), (struct Node *)ip);
 
 		} else {
 
-			CopyMem(p->pr_Data1, r->r_Data, p->pr_Data1Length);
+			CopyMem(ip->ip_Data1, r->r_Data, ip->ip_Data1Length);
 				
-			if( p->pr_Data2Length > 0 ) {
-				printf("A: Copy %d bytes to %ld\n", p->pr_Data1Length, r->r_Data);
-				dest = APB_PointerAdd(r->r_Data, p->pr_Data1Length);
-				printf("B: Copy %d bytes to %ld\n", p->pr_Data2Length, dest);
-				CopyMem(p->pr_Data2, dest, p->pr_Data2Length);
+			if( ip->ip_Data2Length > 0 ) {
+				dest = APB_PointerAdd(r->r_Data, ip->ip_Data1Length);
+				CopyMem(ip->ip_Data2, dest, ip->ip_Data2Length);
 			}
 
 			r->r_State = APB_RS_OK;
 
-            APB_ReleasePacketRef(p);			
+            APB_ReleaseInPacket(ip);			
 		}
 
         ReplyMsg((struct Message *)r);		
     }    
 }
 
-VOID APB_HandleConnectionPacket(Connection cnn, struct PacketRef *pr)
+VOID APB_HandleConnectionPacket(Connection cnn, struct InPacket *ip)
 {
     struct Connection *c = (struct Connection *)cnn;
     struct APBRequest *req;
@@ -197,7 +185,7 @@ VOID APB_HandleConnectionPacket(Connection cnn, struct PacketRef *pr)
     UWORD replyReqType = 0;
     UWORD replyReqState = 0;
 
-    switch( pr->pr_Type ) {
+    switch( ip->ip_Type ) {
 
         case PT_CONNECTED:
             c->cnn_State = CS_CONNECTED;
@@ -207,20 +195,11 @@ VOID APB_HandleConnectionPacket(Connection cnn, struct PacketRef *pr)
             replyReqState = APB_RS_OK;
 
             APB_IncrementStat(ST_CNN_SUCCESSES, 1);
-
-            printf("Got connected packet for %d\n", c->cnn_Id);    
-
             break;
 
         case PT_DISCONNECTED:
             c->cnn_State = CS_DISCONNECTED;
             releasePacket = TRUE;
-            replyReq = TRUE;
-            replyReqType = APB_RT_OPEN;
-            replyReqState = APB_RS_OK;
-
-            printf("Got disconnected packet for %d\n", c->cnn_Id);    
-
             destroyCnn = TRUE;
             break;
 
@@ -238,15 +217,14 @@ VOID APB_HandleConnectionPacket(Connection cnn, struct PacketRef *pr)
 			if( c->cnn_State >= CS_DISCONNECTING ) {
 				releasePacket = TRUE;
 			} else {
-				printf("Got data packet for %d\n", c->cnn_Id);
-	            AddTail(PAC_LIST(c), (struct Node *)pr);
+	            AddTail(PAC_LIST(c), (struct Node *)ip);
     	        APB_PushToClient(c);
 			}
             break;            
     }
 
     if( releasePacket ) {
-        APB_ReleasePacketRef(pr);
+        APB_ReleaseInPacket(ip);
     }
 
     if( replyReq ) {
@@ -257,8 +235,6 @@ VOID APB_HandleConnectionPacket(Connection cnn, struct PacketRef *pr)
 
             if( req->r_Type == replyReqType ) {
                 req->r_State = replyReqState;
-
-                printf("Sending reply to msg %02x. State %02x\n", replyReqType, replyReqState);    
 
                 Remove((struct Node *)req);
 
@@ -292,12 +268,8 @@ VOID APB_HandleClientRequest(Connection cnn, struct APBRequest *req)
             break;
 
         case APB_RT_CLOSE:
-
-            if( c->cnn_State == CS_DISCONNECTED ) {
-                reply = TRUE;
-            }
-            else if(c->cnn_State < CS_DISCONNECTING ) {
-                AddTail(REQ_LIST(c), (struct Node *)req);
+			reply = TRUE;
+			if(c->cnn_State < CS_DISCONNECTING ) {
                 APB_CnnDisconnect(c);
             }
             break;
@@ -345,10 +317,12 @@ VOID APB_HandleClientRequest(Connection cnn, struct APBRequest *req)
                     break;
             }
             break;
+
+		default:
+			break;
     }
 
     if( reply ) {
-
         ReplyMsg((struct Message *)req);
     }
 }

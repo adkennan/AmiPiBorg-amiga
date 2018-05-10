@@ -39,6 +39,8 @@ VOID APB_MemDecrementStats(LONG size)
 #endif
 }
 
+#ifdef APB_USE_MEMPOOL
+
 MemoryPool APB_CreatePool(VOID)
 {
     APTR mp;
@@ -96,6 +98,50 @@ VOID APB_FreeMem(MemoryPool pool, VOID *memory, ULONG size)
 
     APB_MemDecrementStats((LONG)size);
 }
+
+#else
+
+MemoryPool APB_CreatePool(VOID)
+{
+    struct Pool *p;
+
+    if( ! (p = AllocMem(sizeof(struct Pool), MEMF_ANY ) ) ) {
+        return NULL;
+    }
+
+    APB_MemIncrementStats(sizeof(struct Pool));
+    
+    p->p_MemPool = NULL;
+
+    return p;
+}
+
+VOID APB_DestroyPool(MemoryPool pool)
+{
+	FreeMem(pool, sizeof(struct Pool));
+
+    APB_MemDecrementStats(sizeof(struct Pool));
+}
+
+VOID *APB_AllocMem(MemoryPool pool, ULONG size)
+{
+    VOID *mem;
+	
+	if( mem = AllocMem(size, MEMF_ANY) ) {
+	    APB_MemIncrementStats((LONG)size);
+	}
+
+	return mem;
+}
+
+VOID APB_FreeMem(MemoryPool pool, VOID *memory, ULONG size)
+{
+    APB_MemDecrementStats((LONG)size);
+
+	FreeMem(memory, size);
+}
+
+#endif
 
 APTR APB_PointerAdd(APTR ptr, LONG amt)
 {

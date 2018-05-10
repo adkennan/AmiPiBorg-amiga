@@ -7,7 +7,7 @@
 enum StatTypes
 {
     // Memory
-    ST_MEM_ALLOC_COUNT,
+    ST_MEM_ALLOC_COUNT = 1,
     ST_MEM_FREE_COUNT,
     ST_MEM_TOTAL_ALLOCATED,
     ST_MEM_TOTAL_FREED,
@@ -26,14 +26,15 @@ enum StatTypes
     ST_BUF_ALLOCATED,
     ST_BUF_ALLOC_FAILURES,
     
-    // Buffer Refs
-    ST_BR_ALLOCATED,
-    ST_BR_ALLOC_FAILURES,
+    // In Buffers
+    ST_IB_ALLOCATED,
+    ST_IB_ALLOC_FAILURES,
 
-    // Packet Refs
-    ST_PR_ALLOCATED,
-    ST_PR_ALLOC_FAILURES,
-    ST_PR_SPLIT_COUNT,
+    // In Packets
+    ST_IP_ALLOCATED,
+    ST_IP_ALLOC_FAILURES,
+    ST_IP_SPLIT_COUNT,
+    ST_IP_INVALID_DATA,
 
     // Queues   
     ST_Q_INCOMING_SIZE,
@@ -42,7 +43,7 @@ enum StatTypes
     // Packets
     ST_PAC_SENT,
     ST_PAC_RECEIVED,
-
+    
     // Bytes
     ST_BYTES_SENT,
     ST_BYTES_RECEIVED,
@@ -52,7 +53,6 @@ enum StatTypes
     ST_CNN_SUCCESSES,
     ST_CNN_FAILURES,
     ST_CNN_CURRENT,
-
 
     ST_END
 };

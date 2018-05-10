@@ -9,9 +9,11 @@
 enum ObjectTypes
 {
     OT_BUFFER    = 100,
-    OT_PACKET_REF = 200,
-    OT_BUFFER_REF = 300,
-    OT_CONNECTION = 400
+    OT_IN_PACKET = 200,
+    OT_IN_BUFFER = 300,
+    OT_CONNECTION = 400,
+	OT_OUT_PACKET = 500,
+	OT_OUT_BUFFER = 600
 };
 
 typedef APTR ObjectPool;

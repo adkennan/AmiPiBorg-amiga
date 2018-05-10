@@ -89,7 +89,7 @@ Server APB_CreateServer(VOID)
             if( srv->srv_ObjPool = APB_CreateObjectPool(srv->srv_MemPool) ) {
 
                 if( srv->srv_PacketWriter = APB_CreatePacketWriter(srv->srv_MemPool, srv->srv_ObjPool) ) {
-
+					
                     if( srv->srv_PacketReader = APB_CreatePacketReader(srv->srv_MemPool, srv->srv_ObjPool) ) {
     
                         if( srv->srv_Remote = APB_CreateRemote(srv->srv_MemPool, srv->srv_ObjPool) ) {
@@ -206,21 +206,11 @@ VOID APB_EnableTimer(struct Server *srv,ULONG timeoutMillis)
 
 VOID APB_SrvSendToRemote(struct Server *srv)
 {
-    struct Buffer *buf;
-
-    if( APB_WriterQueueSize(srv->srv_PacketWriter) == 0 ) {
-        return;
-    }
-
     if( !APB_CanSendToRemote(srv->srv_Remote) ) {
         return;
     }
 
-    buf = APB_DequeueBuffer(srv->srv_PacketWriter);
-
-    APB_IncrementStat(ST_BYTES_SENT, buf->b_Offset);            
-
-    APB_SendToRemote(srv->srv_Remote, buf);
+    APB_WriteBuffer(srv->srv_PacketWriter, srv->srv_Remote);
 }
 
 VOID APB_SendPing(struct Server *srv)
@@ -230,8 +220,6 @@ VOID APB_SendPing(struct Server *srv)
     if( ! (p = APB_AllocPacket(srv->srv_PacketWriter, sizeof(struct Packet) ) ) ) {
         return;
     }
-
-    //printf("Ping...\n");
 
     p->pac_Type      = PT_PING;
     p->pac_ConnId    = DEFAULT_CONNECTION;
@@ -257,12 +245,12 @@ VOID APB_SendError(struct Server *srv, UWORD connId, UWORD errorCode)
     APB_SrvSendToRemote(srv);
 }
 
-VOID APB_HandleControlPacket(struct Server *srv, struct PacketRef *pr)
+VOID APB_HandleControlPacket(struct Server *srv, struct InPacket *ip)
 {
-
-    switch( pr->pr_Type ) {
+    switch( ip->ip_Type ) {
     
         case PT_HELLO:
+			printf("Server Connected\n");
             srv->srv_State = SS_CONNECTED;
             // TODO: Get list of handlers.
 
@@ -276,17 +264,16 @@ VOID APB_HandleControlPacket(struct Server *srv, struct PacketRef *pr)
         case PT_PONG:
             srv->srv_MissedPingCount = 0;
             srv->srv_PingPending = FALSE;           
-            //printf("Pong...\n");
             break;
     }
     
-    APB_ReleasePacketRef(pr);
+    APB_ReleaseInPacket(ip);
 }
 
 VOID APB_RequestResend(struct Server *srv, UWORD currPackId)
 {
     struct PacketResend *p;
-    UWORD packId = srv->srv_LastInPackId;
+    UWORD packId = srv->srv_LastInPackId + 1;
 
     while( packId < currPackId ) {
     
@@ -302,39 +289,38 @@ VOID APB_RequestResend(struct Server *srv, UWORD currPackId)
 }
 
 
-VOID APB_HandlePacket(struct Server *srv, struct PacketRef *pr)
+VOID APB_HandlePacket(struct Server *srv, struct InPacket *ip)
 {
     Connection cnn;
-	UWORD ix;
 
-    if( !(pr->pr_Flags & PF_RESEND) ) {
-		if( pr->pr_PackId - 1 > srv->srv_LastInPackId ) {
-        	printf("Expecting packet %d, got %d\n", srv->srv_LastInPackId + 1, pr->pr_PackId);
-			
-			for( ix = srv->srv_LastInPackId + 1; ix < pr->pr_PackId; ix++ ) {
-			    APB_RequestResend(srv, ix);
-			}
+	//printf("Got packet %d for connection %d\n", ip->ip_PackId, ip->ip_ConnId);
+
+    if( !(ip->ip_Flags & PF_RESEND) ) {
+		if( ip->ip_PackId - 1 > srv->srv_LastInPackId ) {
+        	printf("Expecting packet %d, got %d\n", srv->srv_LastInPackId + 1, ip->ip_PackId);
+
+			APB_RequestResend(srv, ip->ip_PackId);			
     	}
 		
-    	srv->srv_LastInPackId = pr->pr_PackId;
+    	srv->srv_LastInPackId = ip->ip_PackId;
 	} else {
-		printf("Received resent packet %d\n", pr->pr_PackId);
+		printf("Received resent packet %d\n", ip->ip_PackId);
 	}
 
-    if( pr->pr_ConnId == DEFAULT_CONNECTION ) {
-        APB_HandleControlPacket(srv, pr); 
+    if( ip->ip_ConnId == DEFAULT_CONNECTION ) {
+        APB_HandleControlPacket(srv, ip); 
 
     } else {
 
-        cnn = APB_FindConnection(CONNECTIONS(srv), pr->pr_ConnId);
+        cnn = APB_FindConnection(CONNECTIONS(srv), ip->ip_ConnId);
         if( cnn == NULL ) {       
 
-            APB_SendError(srv, pr->pr_ConnId, PT_NO_CONNECTION);
-            APB_ReleasePacketRef(pr);
+            APB_SendError(srv, ip->ip_ConnId, PT_NO_CONNECTION);
+            APB_ReleaseInPacket(ip);
 
         } else {
 
-            APB_HandleConnectionPacket(cnn, pr);
+            APB_HandleConnectionPacket(cnn, ip);
         }
     }
 }
@@ -342,7 +328,7 @@ VOID APB_HandlePacket(struct Server *srv, struct PacketRef *pr)
 VOID APB_SrvReceiveFromRemote(struct Server *srv)
 {
     struct Buffer *buf;
-    struct PacketRef *pr;
+    struct InPacket *ip;
 
     if( !APB_CanReceiveFromRemote(srv->srv_Remote) ) {
     
@@ -355,9 +341,9 @@ VOID APB_SrvReceiveFromRemote(struct Server *srv)
 
     while( APB_ReaderQueueSize(srv->srv_PacketReader) > 0 ) {
 
-        pr = APB_DequeuePacketRef(srv->srv_PacketReader);
+        ip = APB_DequeueInPacket(srv->srv_PacketReader);
 
-        APB_HandlePacket(srv, pr);
+        APB_HandlePacket(srv, ip);
     }    
 }
 
@@ -384,6 +370,8 @@ VOID APB_ReceiveFromClient(struct Server *srv)
             APB_HandleClientRequest(cnn, req);
         }
     }
+
+	//printf("No more client requests\n");
 }
 
 VOID APB_HandleTimer(struct Server *srv)
@@ -434,18 +422,14 @@ VOID APB_WaitForMessage(struct Server *srv)
     }
 
     if( sig & (1 << srv->srv_TimerPort->mp_SigBit ) ) {
-        //printf("Tick!\n");
         APB_HandleTimer(srv);    
     }
 
     if( srv->srv_ClientPort && (sig & (1 << srv->srv_ClientPort->mp_SigBit ) ) ) {
-        //printf("Client!\n");
         APB_ReceiveFromClient(srv);
     }
 
     if( sig & remoteSigBits ) {
-    
-        //printf("Remote!\n");
         APB_HandleSignal(srv->srv_Remote, sig);
     }
 
@@ -470,8 +454,6 @@ BOOL APB_SendInit(struct Server *srv)
     if( ! (p = (struct PacketInit *)APB_AllocPacket(srv->srv_PacketWriter, sizeof(struct PacketInit) ) ) ) {
         return FALSE;
     }
-
-    //printf("APB_SendInit\n");
 
     srv->srv_State = SS_WAIT_FOR_CONNECT;
 
@@ -570,7 +552,7 @@ VOID APB_Run(Server server)
 
 
             case SS_CONNECTED:
-
+				
                 APB_WaitForMessage(srv);
                 break;
 
