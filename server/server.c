@@ -24,7 +24,10 @@
 
 #include <stdio.h>
 
+#define PING_TICKS 5
 #define MAX_MISSED_PINGS 5
+
+#define TICK_MILLIS 1000
 
 enum ServerState
 {
@@ -58,9 +61,10 @@ struct Server
     struct MinList      srv_Connections;
     UWORD               srv_State;
     UWORD               srv_NextConnId;
-    UWORD               srv_MissedPingCount;
     UWORD               srv_LastInPackId;
-    BOOL                srv_PingPending;
+	UWORD				srv_PingSendTicks;
+    UWORD               srv_MissedPingCount;
+    UWORD				srv_PingTimeoutTicks;
 };
 
 #define CONNECTIONS(s) ((struct List *)&s->srv_Connections)
@@ -82,7 +86,9 @@ Server APB_CreateServer(VOID)
             srv->srv_State = SS_STARTING;
             srv->srv_MissedPingCount = 0;
             srv->srv_LastInPackId = 0;
-            srv->srv_PingPending = FALSE;
+            srv->srv_PingSendTicks = MAX_MISSED_PINGS;
+			srv->srv_MissedPingCount = 0;
+			srv->srv_PingTimeoutTicks = 0;
             
             NewList(CONNECTIONS(srv));
 
@@ -193,7 +199,7 @@ VOID APB_DestroyServer(Server server)
 }
 
 
-VOID APB_EnableTimer(struct Server *srv,ULONG timeoutMillis)
+VOID APB_EnableTimer(struct Server *srv, ULONG timeoutMillis)
 {
     AbortIO((struct IORequest *)srv->srv_TimerReq);
 
@@ -226,9 +232,8 @@ VOID APB_SendPing(struct Server *srv)
 
     APB_SrvSendToRemote(srv);
 
-    srv->srv_PingPending = TRUE;
-
-    APB_EnableTimer(srv, 5000);
+    srv->srv_PingTimeoutTicks = PING_TICKS;
+	srv->srv_PingSendTicks = 0;
 }
 
 VOID APB_SendError(struct Server *srv, UWORD connId, UWORD errorCode)
@@ -243,6 +248,13 @@ VOID APB_SendError(struct Server *srv, UWORD connId, UWORD errorCode)
     p->pac_ConnId    = connId;
 
     APB_SrvSendToRemote(srv);
+}
+
+VOID APB_HandleResendRequest(struct Server *srv, struct InPacket *ip)
+{
+	UWORD packId = *((UWORD *)ip->ip_Data1);
+
+	APB_ResendPacket(srv->srv_PacketWriter, packId);
 }
 
 VOID APB_HandleControlPacket(struct Server *srv, struct InPacket *ip)
@@ -263,8 +275,11 @@ VOID APB_HandleControlPacket(struct Server *srv, struct InPacket *ip)
 
         case PT_PONG:
             srv->srv_MissedPingCount = 0;
-            srv->srv_PingPending = FALSE;           
             break;
+
+		case PT_RESEND:
+			APB_HandleResendRequest(srv, ip);			
+			break;
     }
     
     APB_ReleaseInPacket(ip);
@@ -293,7 +308,8 @@ VOID APB_HandlePacket(struct Server *srv, struct InPacket *ip)
 {
     Connection cnn;
 
-	//printf("Got packet %d for connection %d\n", ip->ip_PackId, ip->ip_ConnId);
+	srv->srv_PingSendTicks = PING_TICKS;
+	srv->srv_PingTimeoutTicks = 0;
 
     if( !(ip->ip_Flags & PF_RESEND) ) {
 		if( ip->ip_PackId - 1 > srv->srv_LastInPackId ) {
@@ -370,8 +386,6 @@ VOID APB_ReceiveFromClient(struct Server *srv)
             APB_HandleClientRequest(cnn, req);
         }
     }
-
-	//printf("No more client requests\n");
 }
 
 VOID APB_HandleTimer(struct Server *srv)
@@ -385,24 +399,38 @@ VOID APB_HandleTimer(struct Server *srv)
             break;
 
         case SS_CONNECTED:
-            if( srv->srv_PingPending ) {
-                srv->srv_MissedPingCount++;
-            }
+            if( srv->srv_PingTimeoutTicks == 1 ) {
+                srv->srv_PingTimeoutTicks = 0;
+				srv->srv_MissedPingCount++;
 
-            if( srv->srv_MissedPingCount > MAX_MISSED_PINGS ) {
-                printf("Connection Lost\n");
-                srv->srv_State = SS_CONNECTION_LOST;
+	            if( srv->srv_MissedPingCount > MAX_MISSED_PINGS ) {
+    	            printf("Connection Lost\n");
+        	        srv->srv_State = SS_CONNECTION_LOST;
+	            }
+			} else if( srv->srv_PingTimeoutTicks > 1 ) {
+				srv->srv_PingTimeoutTicks--;
+			}
 
-            } else {
-                        
-                APB_SendPing(srv);                    
-            }                  
+			if( srv->srv_PingSendTicks == 1 ) {
+				APB_SendPing(srv);
+
+			} else if( srv->srv_PingSendTicks > 1 ) {
+				srv->srv_PingSendTicks--;
+			}
+
+			APB_CheckRequestTimeouts(CONNECTIONS(srv));
+
             break;
 
         case SS_DISCONNECTING:
             srv->srv_State = SS_DISCONNECTED;
             break;
     }
+
+	if( srv->srv_State != SS_DISCONNECTED ) {
+	
+		APB_EnableTimer(srv, TICK_MILLIS);
+	}
 }
 
 VOID APB_WaitForMessage(struct Server *srv)
@@ -464,8 +492,6 @@ BOOL APB_SendInit(struct Server *srv)
 
     APB_SrvSendToRemote(srv);
 
-    APB_EnableTimer(srv, 5000);
-    
     return TRUE;
 }
 
@@ -482,8 +508,6 @@ BOOL APB_SendShutdown(struct Server *srv)
 
     APB_SrvSendToRemote(srv);
 
-    APB_EnableTimer(srv, 2000);
-
     return TRUE;
 }
 
@@ -496,6 +520,7 @@ VOID APB_Run(Server server)
 
     srv->srv_State = SS_STARTING;
 
+	APB_EnableTimer(srv, TICK_MILLIS);
 
     while(srv->srv_State != SS_STOPPED) {
 

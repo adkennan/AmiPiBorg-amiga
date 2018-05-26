@@ -148,6 +148,8 @@ struct Packet *APB_AllocPacketWithId(PacketWriter packetWriter, UWORD length, UW
             return NULL;
         }
 
+		printf("Write Buffer: %04x\n", ob->ob_Buf);
+
 		ob->ob_Offset = 0;
 		ob->ob_PacketCount = 0;
 		ob->ob_CanRelease = FALSE;
@@ -170,6 +172,7 @@ struct Packet *APB_AllocPacketWithId(PacketWriter packetWriter, UWORD length, UW
 
     op->op_Pac->pac_Id = PACKET_ID;
     op->op_Pac->pac_PackId = packId;
+	op->op_Pac->pac_Flags = 0;
     op->op_Pac->pac_Length = length - sizeof(struct Packet);
 	op->op_Pac->pac_Checksum = 0;
     ob->ob_Buf->b_Offset += length;	
@@ -205,7 +208,7 @@ struct Packet *APB_AllocPacketWithId(PacketWriter packetWriter, UWORD length, UW
 VOID APB_WriteBuffer(PacketWriter packetWriter, Remote remote)
 {
     struct PacketWriter *pw = (struct PacketWriter *)packetWriter;
-	UWORD bc, /*pc,*/ ps;
+	UWORD bc, ps;
 	BYTE *data;
 	struct OutBuffer *ob;
 	struct OutPacket *op;
@@ -217,8 +220,6 @@ VOID APB_WriteBuffer(PacketWriter packetWriter, Remote remote)
 	ob = (struct OutBuffer *)PW_QUEUE(pw)->lh_Head;
 	if( ob->ob_Offset < ob->ob_Buf->b_Offset ) {
 
-//		pc = 0;
-	
 		for( op = (struct OutPacket *)PW_PACKS(pw)->lh_Head;
 		     op->op_Node.mln_Succ;
 			 op = (struct OutPacket *)op->op_Node.mln_Succ ) {
@@ -226,8 +227,6 @@ VOID APB_WriteBuffer(PacketWriter packetWriter, Remote remote)
 			if( op->op_OutBuf == ob && ! op->op_Sent ) {
 				ps = sizeof(struct Packet) + op->op_Pac->pac_Length + (op->op_Pac->pac_Length % 2 == 1  ? 1 : 0);
 				op->op_Pac->pac_Checksum = APB_CalculateChecksum((UWORD *)op->op_Pac, ps);
-
-//				pc++;
 				op->op_Sent = TRUE;
 			}
 		}
@@ -254,4 +253,28 @@ VOID APB_WriteBuffer(PacketWriter packetWriter, Remote remote)
 	}
 }
 
+VOID APB_ResendPacket(PacketWriter packetWriter, UWORD packId)
+{
+    struct PacketWriter *pw = (struct PacketWriter *)packetWriter;
+	struct OutPacket *op;
+	struct Packet *copy;
+
+	for( op = (struct OutPacket *)PW_PACKS(pw)->lh_Head;
+	     op->op_Node.mln_Succ;
+		 op = (struct OutPacket *)op->op_Node.mln_Succ ) {
+
+		if( op->op_Pac->pac_Id == packId ) {
+
+			if( copy = APB_AllocPacketWithId(pw, sizeof(struct Packet) + op->op_Pac->pac_Length, packId) ) {
+
+				CopyMem(op->op_Pac, copy, sizeof(struct Packet) + op->op_Pac->pac_Length);
+
+				copy->pac_Flags |= PF_RESEND;
+				copy->pac_Checksum = 0;				
+			}
+
+			break;
+		}
+	}
+}
 

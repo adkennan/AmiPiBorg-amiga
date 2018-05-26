@@ -58,11 +58,13 @@ int main(int argc, char **argv)
 
                       	reader->r_Data = &readBuf;
 	                    reader->r_Length = BUF_SIZE;
+						reader->r_Timeout = 5;
 
     	                if( writer = APB_AllocRequest(conn) ) {
 
         	                writer->r_Data = writeBuf;
                             writer->r_Length = len;
+							writer->r_Timeout = 5;
 
 			          	    if( APB_OpenConnection(conn) ) {
 
@@ -113,7 +115,7 @@ int main(int argc, char **argv)
 												}
     	                                        printf("%d: Received %d bytes: %s\n", count, reader->r_Actual, readBuf);
 	
-    	                                        Delay(50);
+    	                                        //Delay(50);
 
 			    	                            count++;
 												if( count < repeat ) {

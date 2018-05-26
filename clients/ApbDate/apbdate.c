@@ -44,6 +44,7 @@ int main(int argc, char **argv)
 
                    	reader->r_Data = &time;
 	                reader->r_Length = sizeof(ULONG);
+					reader->r_Timeout = 5;
 
 	         	    if( APB_OpenConnection(conn) ) {
 

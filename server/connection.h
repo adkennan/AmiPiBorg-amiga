@@ -26,6 +26,8 @@ VOID APB_DestroyConnection(Connection cnn);
 
 Connection APB_FindConnection(struct List *cnns, UWORD id);
 
+VOID APB_CheckRequestTimeouts(struct List *cnns);
+
 VOID APB_HandleConnectionPacket(Connection cnn, struct InPacket *ip);
 
 VOID APB_HandleClientRequest(Connection cnn, struct APBRequest *req);

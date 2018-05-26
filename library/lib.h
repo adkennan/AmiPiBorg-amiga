@@ -12,6 +12,8 @@
 #include "amipiborg.h"
 #include "amipiborg_protos.h"
 
+#define CNN_MSG_TIMEOUT 5
+
 struct AmiPiBorgLibrary {
     struct Library          l_Lib;
     UWORD                   l_Pad;
@@ -30,6 +32,7 @@ struct Connection {
 struct RequestInt {
 	struct APBRequest 		r_Req;
 	struct Connection 	   *r_Conn;
+	UWORD					r_TimeoutTicks;
 };
 
 VOID *APB_AllocMem(APTR memPool, ULONG memSize);

@@ -16,7 +16,7 @@ CPU=		68030
 DEF_DEBUG_MEM=define=APB_DEBUG_MEM_OFF
 DEF_DEBUG=opt
 
-C_OPTS=		noicons cpu=$(CPU) $(INC) $(DEF_DEBUG_MEM) $(DEF_DEBUG) NoChkAbort 
+C_OPTS=		opt verbose noicons cpu=$(CPU) $(INC) $(DEF_DEBUG_MEM) $(DEF_DEBUG) NoChkAbort 
 
 C_SOURCES=	main.c server.c stats.c memory.c objectpool.c buffer.c packetwriter.c packetreader.c remote.c connection.c protocol.c
 	

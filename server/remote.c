@@ -57,6 +57,7 @@ struct Buffer *APB_GetReadBuffer(struct Remote *r, UWORD *length)
         if( ! ( buf = APB_AllocateBuffer(r->r_ObjPool) ) ) {
             return NULL;
         }
+
         r->r_ReadBuffer = buf;
     }
 
@@ -88,9 +89,11 @@ VOID APB_ContinueRead(struct Remote *r)
 {
     struct Buffer *buf;
     struct IOExtSer *req = r->r_ReadReq;
-    UWORD size;
+    UWORD size, ix;
 
-    r->r_ReadBuffer->b_Offset++;
+//	printf("R (%d): %02x\n",  req->IOSer.io_Actual, *(UBYTE *)APB_PointerAdd(r->r_ReadBuffer->b_Data, r->r_ReadBuffer->b_Offset));
+
+    r->r_ReadBuffer->b_Offset += req->IOSer.io_Actual;
 
     req->IOSer.io_Command = SDCMD_QUERY;
 
@@ -111,6 +114,14 @@ VOID APB_ContinueRead(struct Remote *r)
     req->IOSer.io_Data = APB_PointerAdd(buf->b_Data, buf->b_Offset);
 
     DoIO((struct IORequest *)req);
+
+//	printf("R (%d, %d): ", size, req->IOSer.io_Actual);
+//	if( size != req->IOSer.io_Actual ) {
+//		for( ix = 0; ix < size; ix++ ) {
+//			printf("%02x ", *(UBYTE *)APB_PointerAdd(buf->b_Data, buf->b_Offset + ix));
+//		}
+//	}
+//	printf("\n");
 
     buf->b_Offset += size;
 }
@@ -137,7 +148,7 @@ BOOL APB_OpenRemote(Remote remote)
                         writeReq->IOSer.io_Command = SDCMD_SETPARAMS;
                         writeReq->io_SerFlags &= ~SERF_PARTY_ON;
                         writeReq->io_SerFlags |= SERF_XDISABLED;
-                        writeReq->io_Baud = 19200;
+                        writeReq->io_Baud = 9600;
                         DoIO((struct IORequest *)writeReq);
 
                         writeReq->IOSer.io_Command = CMD_FLUSH;

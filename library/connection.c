@@ -51,21 +51,30 @@ BOOL __asm __saveds APB_OpenConnection(
 {
     struct Connection *conn = (struct Connection *)connection;
     struct APBRequest *req;
+	ULONG sig;
 
     if( req = APB_AllocRequest(conn) ) {
 
         req->r_Type = APB_RT_OPEN;
         req->r_HandlerId = conn->c_HandlerId;
         req->r_Msg.mn_ReplyPort = conn->c_MsgPort;
-            
+        req->r_Timeout = CNN_MSG_TIMEOUT;
+
         if( APB_PutMsg((struct Message *)req) ) {
 
-            WaitPort(req->r_Msg.mn_ReplyPort);
-            GetMsg(req->r_Msg.mn_ReplyPort);
+            sig = Wait(1 << req->r_Msg.mn_ReplyPort->mp_SigBit | SIGBREAKF_CTRL_C);
 
-            conn->c_Status = req->r_State;
-            conn->c_ConnId = req->r_ConnId;
+			if( sig & (1 << req->r_Msg.mn_ReplyPort->mp_SigBit) ) {
 
+	            GetMsg(req->r_Msg.mn_ReplyPort);
+
+    	        conn->c_Status = req->r_State;
+        	    conn->c_ConnId = req->r_ConnId;
+
+			} else {
+				
+				conn->c_Status = APB_RS_ABORTED;
+			}
         } else {
 
             conn->c_Status = APB_RS_NO_SERVER;
@@ -83,6 +92,7 @@ VOID __asm __saveds APB_CloseConnection(
 {
     struct Connection *conn = (struct Connection *)connection;
     struct APBRequest *req;
+	ULONG sig;
 
     if( req = APB_AllocRequest(conn) ) {
 
@@ -90,20 +100,28 @@ VOID __asm __saveds APB_CloseConnection(
         req->r_HandlerId = conn->c_HandlerId;
         req->r_ConnId = conn->c_ConnId;
         req->r_Msg.mn_ReplyPort = conn->c_MsgPort;
+        req->r_Timeout = CNN_MSG_TIMEOUT;
             
         if( APB_PutMsg((struct Message *)req) ) {
 
-            WaitPort(req->r_Msg.mn_ReplyPort);
-            GetMsg(req->r_Msg.mn_ReplyPort);
+            sig = Wait(1 << req->r_Msg.mn_ReplyPort->mp_SigBit | SIGBREAKF_CTRL_C);
 
-            conn->c_Status = req->r_State;
-            conn->c_ConnId = 0;
+			if( sig & (1 << req->r_Msg.mn_ReplyPort->mp_SigBit) ) {
+
+	            GetMsg(req->r_Msg.mn_ReplyPort);
+
+    	        conn->c_Status = req->r_State;
+        	    conn->c_ConnId = 0;
+
+			} else {
+				
+				conn->c_Status = APB_RS_ABORTED;
+			}
 
         } else {
 
             conn->c_Status = APB_RS_NO_SERVER;
         }
-
         
         APB_FreeRequest(req);
     }

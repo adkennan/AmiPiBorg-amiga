@@ -22,5 +22,6 @@ struct Packet *APB_AllocPacket(PacketWriter packetWriter, UWORD length);
 
 struct Packet *APB_AllocPacketWithId(PacketWriter packetWriter, UWORD length, UWORD packId);
 
+VOID APB_ResendPacket(PacketWriter packetWriter, UWORD packId);
 
 #endif // _APB_PACKET_WRITER_H__

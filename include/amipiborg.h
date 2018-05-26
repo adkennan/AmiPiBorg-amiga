@@ -15,7 +15,8 @@ enum RequestState {
 	APB_RS_NO_CONNECTION,
     APB_RS_NO_SERVER,
     APB_RS_ABORTED,
-	APB_RS_BUFFER_TOO_SMALL
+	APB_RS_BUFFER_TOO_SMALL,
+	APB_RS_TIMEOUT
 };
 
 enum RequestType {
@@ -33,6 +34,7 @@ struct APBRequest {
 	UWORD r_State;
 	UWORD r_Actual;
 	UWORD r_Length;
+	UWORD r_Timeout;
 	APTR r_Data;
 };
 

@@ -28,6 +28,12 @@ struct Connection {
     UWORD           cnn_State;
 };
 
+struct RequestInt {
+	struct APBRequest  ri_Req;
+	APTR			   ri_ClientCnn;
+	UWORD 			   ri_TimeoutTicks;
+};
+
 #define REQ_LIST(c) ((struct List *)&c->cnn_ReqQueue)
 #define PAC_LIST(c) ((struct List *)&c->cnn_PacketQueue)
 
@@ -250,14 +256,40 @@ VOID APB_HandleConnectionPacket(Connection cnn, struct InPacket *ip)
     }
 }
 
+VOID APB_CnnCheckRequestTimeouts(struct Connection *c)
+{
+	struct RequestInt *req;
+
+    for( req = (struct RequestInt *)REQ_LIST(c)->lh_Head;
+         req->ri_Req.r_Msg.mn_Node.ln_Succ;
+         req = (struct RequestInt *)req->ri_Req.r_Msg.mn_Node.ln_Succ ) {
+
+		if( req->ri_TimeoutTicks == 1 ) {
+			req->ri_Req.r_State = APB_RS_TIMEOUT;
+
+			Remove((struct Node *)req);
+			
+			ReplyMsg((struct Message *)req);
+
+		} else if( req->ri_TimeoutTicks > 1 ) {
+			req->ri_TimeoutTicks--;
+		}
+	}
+}
+
 VOID APB_HandleClientRequest(Connection cnn, struct APBRequest *req)
 {
     struct Connection *c = (struct Connection *)cnn;
     BOOL reply = FALSE;
+	struct RequestInt *ri = (struct RequestInt *)req;
 
     req->r_State = APB_RS_OK;
     req->r_Actual = 0;
     req->r_ConnId = c->cnn_Id;
+
+	if( req->r_Timeout > 0 ) {
+		ri->ri_TimeoutTicks = req->r_Timeout;
+	}
 
     switch( req->r_Type ) {
 
@@ -355,5 +387,18 @@ Connection APB_FindConnection(struct List *cnns, UWORD id)
 
     }
     return NULL;
+}
+
+VOID APB_CheckRequestTimeouts(struct List *cnns) 
+{
+    struct Connection *cnn;
+
+    for( cnn = (struct Connection *)(cnns->lh_Head);
+         cnn->cnn_Node.mln_Succ;
+         cnn = (struct Connection *)cnn->cnn_Node.mln_Succ ) {
+
+		APB_CnnCheckRequestTimeouts(cnn);
+
+    }
 }
 
