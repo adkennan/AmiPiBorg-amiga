@@ -1,9 +1,6 @@
 # AmiPiBorg-amiga
 Let your Amiga share Raspberry Pi resources - Amiga side.
 
-AmiPiBorg
-=========
-
 AmiPiBorg extends an Amiga by pairing it with a Raspberry Pi. 
 
 A server process runs on both the Amiga and Pi exchanging packets of data over a link between the Amiga and the Pi. The goal is to use the fastest available connection such as the Amiga's parallel port but for ease of development it currently supports only the serial port.
