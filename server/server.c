@@ -1,16 +1,21 @@
 
 #include "server.h"
 
+#include "log.h"
 #include "memory.h"
+#include "config.h"
 #include "objectpool.h"
 #include "buffer.h"
 #include "packetwriter.h"
 #include "packetreader.h"
-#include "remote.h"
 #include "connection.h"
 #include "stats.h"
+#include "remote.h"
 
 #include "amipiborg.h"
+
+#include "remote_protos.h"
+#include "remote_pragmas.h"
 
 #include <exec/io.h>
 #include <exec/lists.h>
@@ -54,7 +59,9 @@ struct Server
     ObjectPool          srv_ObjPool;
     PacketWriter        srv_PacketWriter;
     PacketReader        srv_PacketReader;
-    Remote              srv_Remote;
+	Remote				srv_Remote;
+	struct Config 	   *srv_Config;
+	struct Buffer	   *srv_ReadBuffer;
     struct MsgPort     *srv_ClientPort;
     struct MsgPort     *srv_TimerPort;
     struct timerequest *srv_TimerReq;
@@ -67,70 +74,140 @@ struct Server
     UWORD				srv_PingTimeoutTicks;
 };
 
+struct Library *RemoteBase;
+
 #define CONNECTIONS(s) ((struct List *)&s->srv_Connections)
+
+#define MODULE "Server"
+
+#define ORDIE(msg) else { LOG0(LOG_ERROR, msg); }
+
+BOOL APB_ConfigureRemote(struct Server *srv)
+{
+	struct RemoteArgs *ra = REM_GetArgTemplate(srv->srv_Remote);
+
+	if( srv->srv_Config->cf_RemoteArgs ) {
+		if( ! APB_ParseRemoteArgs(srv->srv_Config, ra) ) {
+			return FALSE;
+		}
+	}
+
+	REM_ConfigureRemote(srv->srv_Remote, ra);
+
+	return TRUE;
+}
 
 Server APB_CreateServer(VOID)
 {
     struct Server *srv;
+	struct Config *cfg;
     MemoryPool mp;
 
     if( mp = APB_CreatePool() ) {
 
-        if( srv = APB_AllocMem(mp, sizeof(struct Server) ) ) {
+		if( cfg = APB_GetConfig(mp) ) {
 
-            srv->srv_MemPool = mp;
-            srv->srv_NextConnId = 1;
-            srv->srv_ClientPort = NULL;
-            srv->srv_TimerPort = NULL;
-            srv->srv_TimerReq = NULL;
-            srv->srv_State = SS_STARTING;
-            srv->srv_MissedPingCount = 0;
-            srv->srv_LastInPackId = 0;
-            srv->srv_PingSendTicks = MAX_MISSED_PINGS;
-			srv->srv_MissedPingCount = 0;
-			srv->srv_PingTimeoutTicks = 0;
+			APB_InitLog(mp, cfg->cf_LogLevel, 1024, cfg->cf_LogToStdOut);
+
+			LOG0(LOG_DEBUG, "Create Server");
+
+    	    if( srv = APB_AllocMem(mp, sizeof(struct Server) ) ) {
+
+	            srv->srv_MemPool = mp;
+				srv->srv_Config = cfg;
+        	    srv->srv_NextConnId = 1;
+            	srv->srv_ClientPort = NULL;
+	            srv->srv_TimerPort = NULL;
+	            srv->srv_TimerReq = NULL;
+	            srv->srv_State = SS_STARTING;
+	            srv->srv_MissedPingCount = 0;
+    	        srv->srv_LastInPackId = 0;
+	            srv->srv_PingSendTicks = MAX_MISSED_PINGS;
+				srv->srv_MissedPingCount = 0;
+				srv->srv_PingTimeoutTicks = 0;
+				srv->srv_ReadBuffer = NULL;
             
-            NewList(CONNECTIONS(srv));
+    	        NewList(CONNECTIONS(srv));
 
-            if( srv->srv_ObjPool = APB_CreateObjectPool(srv->srv_MemPool) ) {
+				LOG0(10, "Create Object Pool");
 
-                if( srv->srv_PacketWriter = APB_CreatePacketWriter(srv->srv_MemPool, srv->srv_ObjPool) ) {
+            	if( srv->srv_ObjPool = APB_CreateObjectPool(srv->srv_MemPool) ) {
+
+					LOG0(LOG_DEBUG, "Create Packet Writer");
+
+	                if( srv->srv_PacketWriter = APB_CreatePacketWriter(srv->srv_MemPool, srv->srv_ObjPool) ) {
+
+						LOG0(LOG_DEBUG, "Create Packet Reader");
 					
-                    if( srv->srv_PacketReader = APB_CreatePacketReader(srv->srv_MemPool, srv->srv_ObjPool) ) {
-    
-                        if( srv->srv_Remote = APB_CreateRemote(srv->srv_MemPool, srv->srv_ObjPool) ) {
+        	            if( srv->srv_PacketReader = APB_CreatePacketReader(srv->srv_MemPool, srv->srv_ObjPool) ) {
 
-                            if( srv->srv_TimerPort = CreateMsgPort() ) {
-    
-                                if( srv->srv_TimerReq =  (struct timerequest *)CreateExtIO(srv->srv_TimerPort, sizeof(struct timerequest) ) ) {
+							LOG1(LOG_DEBUG, "Open Remote Library %s", cfg->cf_RemoteName);
 
-                                    if( OpenDevice(TIMERNAME, UNIT_VBLANK, (struct IORequest *)srv->srv_TimerReq, 0L) == 0 ) {
+							if( RemoteBase = OpenLibrary(cfg->cf_RemoteName, 1) ) {
+
+								LOG0(LOG_DEBUG, "Create Remote");
+
+								if( srv->srv_Remote = REM_CreateRemote() ) {
+
+									LOG0(LOG_DEBUG, "Configure Remote");
+									if( APB_ConfigureRemote(srv) ) {
+
+										LOG0(LOG_DEBUG, "Create Timer Port");
+	
+			                            if( srv->srv_TimerPort = CreateMsgPort() ) {
+    
+											LOG0(LOG_DEBUG, "Create Timer Request");
+
+    	    		                        if( srv->srv_TimerReq =  (struct timerequest *)CreateExtIO(srv->srv_TimerPort, sizeof(struct timerequest) ) ) {
+
+												LOG0(LOG_DEBUG, "Open Timer Device");
+
+        	        		                    if( OpenDevice(TIMERNAME, UNIT_VBLANK, (struct IORequest *)srv->srv_TimerReq, 0L) == 0 ) {
                                 
-                                        return srv;
+													LOG0(LOG_DEBUG, "Server Created");
 
-                                    }
-                
-                                    DeleteExtIO((struct IORequest *)srv->srv_TimerReq);
-                                }
+            	            		                return srv;
 
-                                APB_DeletePort(srv->srv_TimerPort);
-                            }
+												} ORDIE("Failed to open Timer Device")
+	
+    	                	        	        DeleteExtIO((struct IORequest *)srv->srv_TimerReq);
 
-                            APB_DestroyRemote(srv->srv_Remote);
-                        }
+    		                            	} ORDIE("Failed to create Timer Request")
+	
+		       		                        APB_DeletePort(srv->srv_TimerPort);
+		
+										} ORDIE("Failed to create Timer Port")
+
+									} ORDIE("Failed to configure remote");
+
+									REM_DestroyRemote(srv->srv_Remote);
+
+                        	    } ORDIE("Failed to create remote")
+
+								CloseLibrary(RemoteBase);
+
+        	                } ORDIE("Failed to open Remote Library")
     
-                        APB_DestroyPacketReader(srv->srv_PacketReader);
-                    }
+            	            APB_DestroyPacketReader(srv->srv_PacketReader);
 
-                    APB_DestroyPacketWriter(srv->srv_PacketWriter);
-                }
+                	    } ORDIE("Failed to create Packet Reader")
 
-                APB_DestroyObjectPool(srv->srv_ObjPool);
-            }
+                    	APB_DestroyPacketWriter(srv->srv_PacketWriter);
 
-            APB_FreeMem(mp, srv, sizeof(struct Server));
-        }
+	                } ORDIE("Failed to create Packet Writer")
+
+    	            APB_DestroyObjectPool(srv->srv_ObjPool);
+
+        	    } ORDIE("Failed to create Object Pool")
+
+            	APB_FreeMem(mp, srv, sizeof(struct Server));
+	        }
         
+			APB_DestroyLog();
+		
+			APB_FreeConfig(cfg);
+		}
+
         APB_DestroyPool(mp);
     }
 
@@ -158,10 +235,14 @@ VOID APB_DeletePort(struct MsgPort *port) {
 VOID APB_DestroyServer(Server server)
 {
     struct Server *srv = (struct Server *)server;
+	Connection cnn;
 
     MemoryPool mp;
 
     if( srv->srv_TimerReq ) {
+
+		LOG0(LOG_DEBUG, "Close Timer");
+
         AbortIO((struct IORequest *)srv->srv_TimerReq);
         WaitIO((struct IORequest *)srv->srv_TimerReq);
 
@@ -169,31 +250,54 @@ VOID APB_DestroyServer(Server server)
         DeleteExtIO((struct IORequest *)srv->srv_TimerReq);
     }
 
-    while( !IsListEmpty(CONNECTIONS(srv)) ) {
-
-        APB_DestroyConnection((Connection)RemTail(CONNECTIONS(srv)));
-    }
-
     if( srv->srv_TimerPort ) {
         DeleteMsgPort(srv->srv_TimerPort);
     }
+	
+    while( !IsListEmpty(CONNECTIONS(srv)) ) {
 
-    APB_DestroyRemote(srv->srv_Remote);
+		cnn = (Connection)RemTail(CONNECTIONS(srv));
+		LOG1(LOG_INFO, "Destroy Connection %d", APB_GetId(cnn));
+        APB_DestroyConnection(cnn);
+    }
+
+	if( RemoteBase ) {
+
+		LOG0(LOG_DEBUG, "Close Remote");
+
+		if( srv->srv_Remote ) {
+			REM_DestroyRemote(srv->srv_Remote);
+		}
+
+		CloseLibrary(RemoteBase);
+	}
 
     if( srv->srv_PacketReader ) {
+		LOG0(LOG_DEBUG, "Destroy Packet Reader");
         APB_DestroyPacketReader(srv->srv_PacketReader);
     }
 
     if( srv->srv_PacketWriter ) {
+		LOG0(LOG_DEBUG, "Destroy Packet Writer");
         APB_DestroyPacketWriter(srv->srv_PacketWriter);
     }
 
     if( srv->srv_ObjPool ) {
+		LOG0(LOG_DEBUG, "Destroy ObjectPool");
         APB_DestroyObjectPool(srv->srv_ObjPool);
     }
 
+	LOG0(LOG_DEBUG, "Destroy Server");
+
     mp = srv->srv_MemPool;
+
+	APB_FreeConfig(srv->srv_Config);
+
     APB_FreeMem(mp, srv, sizeof(struct Server));
+
+	LOG0(LOG_DEBUG, "Goodbye Cruel World");
+
+	APB_DestroyLog();
 
     APB_DestroyPool(mp);    
 }
@@ -201,6 +305,8 @@ VOID APB_DestroyServer(Server server)
 
 VOID APB_EnableTimer(struct Server *srv, ULONG timeoutMillis)
 {
+	LOG1(LOG_TRACE, "Set timer to %dms", timeoutMillis);
+
     AbortIO((struct IORequest *)srv->srv_TimerReq);
 
     srv->srv_TimerReq->tr_node.io_Command = TR_ADDREQUEST;
@@ -212,9 +318,11 @@ VOID APB_EnableTimer(struct Server *srv, ULONG timeoutMillis)
 
 VOID APB_SrvSendToRemote(struct Server *srv)
 {
-    if( !APB_CanSendToRemote(srv->srv_Remote) ) {
+    if( !REM_CanWrite(srv->srv_Remote) ) {
         return;
     }
+
+	LOG0(LOG_TRACE, "Write Buffer");
 
     APB_WriteBuffer(srv->srv_PacketWriter, srv->srv_Remote);
 }
@@ -226,6 +334,8 @@ VOID APB_SendPing(struct Server *srv)
     if( ! (p = APB_AllocPacket(srv->srv_PacketWriter, sizeof(struct Packet) ) ) ) {
         return;
     }
+
+	LOG0(LOG_TRACE, "Ping");
 
     p->pac_Type      = PT_PING;
     p->pac_ConnId    = DEFAULT_CONNECTION;
@@ -244,6 +354,8 @@ VOID APB_SendError(struct Server *srv, UWORD connId, UWORD errorCode)
         return;
     }
 
+	LOG2(LOG_ERROR, "Error: connId = %d, errorCode = %d", connId, errorCode);
+
     p->pac_Type      = errorCode;
     p->pac_ConnId    = connId;
 
@@ -254,7 +366,40 @@ VOID APB_HandleResendRequest(struct Server *srv, struct InPacket *ip)
 {
 	UWORD packId = *((UWORD *)ip->ip_Data1);
 
+	LOG1(LOG_INFO, "Resend request for packet %d", packId);
+
 	APB_ResendPacket(srv->srv_PacketWriter, packId);
+}
+
+VOID APB_ConfigureServer(struct Server *srv, struct InPacket *ip)
+{
+	struct PacketHello *p;
+	struct HandlerDesc *h;
+	UWORD size = ip->ip_Data1Length + ip->ip_Data2Length;
+	UWORD ix;
+
+	if( !(p = APB_AllocMem(srv->srv_MemPool, size) ) ) {
+		LOG1(LOG_ERROR, "Can't allocate %d bytes for hello packet", size);
+		return;
+	}
+
+	APB_InPacketToBuffer(ip, p);
+
+	LOG1(LOG_INFO, "Server version %d", p->ph_Version);
+
+	LOG1(LOG_INFO, "%d Handlers Available:", p->ph_HandlerCount);
+	if( p->ph_HandlerCount >  0 ) {
+		h = (struct HandlerDesc *)(p + 1);
+
+		for( ix = 0; ix < p->ph_HandlerCount; ix++ ) {
+
+			LOG2(LOG_INFO, "\t%d: %s", h->hd_HandlerId, h->hd_HandlerName);
+
+			h++;		
+		}
+	}
+		
+	APB_FreeMem(srv->srv_MemPool, p, size);
 }
 
 VOID APB_HandleControlPacket(struct Server *srv, struct InPacket *ip)
@@ -262,23 +407,29 @@ VOID APB_HandleControlPacket(struct Server *srv, struct InPacket *ip)
     switch( ip->ip_Type ) {
     
         case PT_HELLO:
-			printf("Server Connected\n");
+			LOG0(LOG_DEBUG, "Hello Received");
             srv->srv_State = SS_CONNECTED;
-            // TODO: Get list of handlers.
-
+			APB_ConfigureServer(srv, ip);
             APB_SendPing(srv);
             break;
     
         case PT_GOODBYE:
+			LOG0(LOG_DEBUG, "Goodbye Received");
             srv->srv_State = SS_DISCONNECTED;
             break;
 
         case PT_PONG:
+			LOG0(LOG_TRACE, "Ping Received");
             srv->srv_MissedPingCount = 0;
             break;
 
 		case PT_RESEND:
+			LOG0(LOG_DEBUG, "Resend Request Received");
 			APB_HandleResendRequest(srv, ip);			
+			break;
+
+		default:
+			LOG1(LOG_ERROR, "Unknown control packet %d", ip->ip_Type);
 			break;
     }
     
@@ -296,6 +447,8 @@ VOID APB_RequestResend(struct Server *srv, UWORD currPackId)
             break;
         }
 
+		LOG1(LOG_DEBUG, "Requesting Resend of packet %d", packId);
+
         p->pr_Pac.pac_Type      = PT_RESEND;
         p->pr_Pac.pac_ConnId    = DEFAULT_CONNECTION;
         p->pr_PacketId = packId;
@@ -308,19 +461,21 @@ VOID APB_HandlePacket(struct Server *srv, struct InPacket *ip)
 {
     Connection cnn;
 
+	LOG1(LOG_TRACE, "Received packet %d", ip->ip_PackId);
+
 	srv->srv_PingSendTicks = PING_TICKS;
 	srv->srv_PingTimeoutTicks = 0;
 
     if( !(ip->ip_Flags & PF_RESEND) ) {
 		if( ip->ip_PackId - 1 > srv->srv_LastInPackId ) {
-        	printf("Expecting packet %d, got %d\n", srv->srv_LastInPackId + 1, ip->ip_PackId);
+        	LOG2(LOG_DEBUG, "Expecting packet %d, got %d", srv->srv_LastInPackId + 1, ip->ip_PackId);
 
 			APB_RequestResend(srv, ip->ip_PackId);			
     	}
 		
     	srv->srv_LastInPackId = ip->ip_PackId;
 	} else {
-		printf("Received resent packet %d\n", ip->ip_PackId);
+		LOG1(LOG_DEBUG, "Received resent packet %d", ip->ip_PackId);
 	}
 
     if( ip->ip_ConnId == DEFAULT_CONNECTION ) {
@@ -330,6 +485,8 @@ VOID APB_HandlePacket(struct Server *srv, struct InPacket *ip)
 
         cnn = APB_FindConnection(CONNECTIONS(srv), ip->ip_ConnId);
         if( cnn == NULL ) {       
+
+			LOG1(LOG_DEBUG, "Packet received for unknown connection %d", ip->ip_ConnId);
 
             APB_SendError(srv, ip->ip_ConnId, PT_NO_CONNECTION);
             APB_ReleaseInPacket(ip);
@@ -341,26 +498,56 @@ VOID APB_HandlePacket(struct Server *srv, struct InPacket *ip)
     }
 }
 
+VOID APB_SrvBeginRead(struct Server *srv)
+{
+	struct Buffer *buf;
+
+	if( srv->srv_ReadBuffer == NULL ||  BUF_FULL(srv->srv_ReadBuffer) ) {
+        if( ! ( buf = APB_AllocateBuffer(srv->srv_ObjPool) ) ) {
+            LOG0(LOG_ERROR, "Unable to allocate read buffer");
+        } else {
+			srv->srv_ReadBuffer = buf;
+		}
+	}
+
+    if( !REM_CanRead(srv->srv_Remote) ) {
+        return;
+    }
+
+	LOG1(LOG_TRACE, "Read up to %d bytes", BUF_AVAIL(srv->srv_ReadBuffer));
+
+	REM_Read(srv->srv_Remote, BUF_CURR(srv->srv_ReadBuffer), BUF_AVAIL(srv->srv_ReadBuffer));
+}
+
 VOID APB_SrvReceiveFromRemote(struct Server *srv)
 {
-    struct Buffer *buf;
     struct InPacket *ip;
+	UWORD bytesRead;
 
-    if( !APB_CanReceiveFromRemote(srv->srv_Remote) ) {
+    if( !REM_CanRead(srv->srv_Remote) ) {
     
         return;
     }
 
-    buf = APB_ReceiveFromRemote(srv->srv_Remote);
+	bytesRead = REM_BytesRead(srv->srv_Remote);
+	if( bytesRead == 0 ) {
+		return;
+	}
 
-    APB_ProcessBuffer(srv->srv_PacketReader, buf);
+	LOG1(LOG_DEBUG, "Read %d bytes", bytesRead);
+
+	srv->srv_ReadBuffer->b_Offset += bytesRead;
+
+    APB_ProcessBuffer(srv->srv_PacketReader, srv->srv_ReadBuffer);
+
+	APB_SrvBeginRead(srv);
 
     while( APB_ReaderQueueSize(srv->srv_PacketReader) > 0 ) {
 
         ip = APB_DequeueInPacket(srv->srv_PacketReader);
 
         APB_HandlePacket(srv, ip);
-    }    
+    }  
 }
 
 VOID APB_ReceiveFromClient(struct Server *srv)
@@ -378,6 +565,8 @@ VOID APB_ReceiveFromClient(struct Server *srv)
         }
 
         if( cnn == NULL ) {
+
+			LOG1(LOG_DEBUG, "Received message from invalid connection %d", req->r_ConnId);
 
             req->r_State = APB_RS_NO_CONNECTION;
             ReplyMsg((struct Message *)req);
@@ -404,7 +593,6 @@ VOID APB_HandleTimer(struct Server *srv)
 				srv->srv_MissedPingCount++;
 
 	            if( srv->srv_MissedPingCount > MAX_MISSED_PINGS ) {
-    	            printf("Connection Lost\n");
         	        srv->srv_State = SS_CONNECTION_LOST;
 	            }
 			} else if( srv->srv_PingTimeoutTicks > 1 ) {
@@ -437,15 +625,21 @@ VOID APB_WaitForMessage(struct Server *srv)
 {
     ULONG sig, remoteSigBits;
 
-    remoteSigBits = APB_GetSigBits(srv->srv_Remote);
+    remoteSigBits = REM_GetSignalBits(srv->srv_Remote);
 
-    sig = Wait(SIGBREAKF_CTRL_C 
+	sig = SIGBREAKF_CTRL_C 
                | remoteSigBits
                | (srv->srv_ClientPort ? (1 << srv->srv_ClientPort->mp_SigBit) : 0)
-               | (1 << srv->srv_TimerPort->mp_SigBit));
+               | (1 << srv->srv_TimerPort->mp_SigBit);
+
+	LOG1(LOG_TRACE, "Wait for sigs 0x%x", sig);
+
+    sig = Wait(sig);
+
+	LOG1(LOG_TRACE, "Received sig 0x%x", sig);
 
     if( sig & SIGBREAKF_CTRL_C ) {
-        printf("Break!\n");
+        LOG0(LOG_INFO, "Break!");
         srv->srv_State = SS_DISCONNECTED;        
     }
 
@@ -458,7 +652,7 @@ VOID APB_WaitForMessage(struct Server *srv)
     }
 
     if( sig & remoteSigBits ) {
-        APB_HandleSignal(srv->srv_Remote, sig);
+        REM_HandleSignal(srv->srv_Remote, sig);
     }
 
     APB_SrvReceiveFromRemote(srv);
@@ -467,6 +661,8 @@ VOID APB_WaitForMessage(struct Server *srv)
 
 BOOL APB_OpenClient(struct Server *srv)
 {
+	LOG0(LOG_DEBUG, "Open Client Port");
+
     if( srv->srv_ClientPort = CreatePort(PORT_NAME, 0) ) {
 
         return TRUE;
@@ -482,6 +678,10 @@ BOOL APB_SendInit(struct Server *srv)
     if( ! (p = (struct PacketInit *)APB_AllocPacket(srv->srv_PacketWriter, sizeof(struct PacketInit) ) ) ) {
         return FALSE;
     }
+
+	LOG0(LOG_DEBUG, "Send Init");
+	LOG1(LOG_DEBUG, "Version = %d", AMIPIBORG_VERSION);
+	LOG1(LOG_DEBUG, "MaxPacketSize = %d", BUFFER_SIZE);
 
     srv->srv_State = SS_WAIT_FOR_CONNECT;
 
@@ -502,6 +702,8 @@ BOOL APB_SendShutdown(struct Server *srv)
     if( ! (p = APB_AllocPacket(srv->srv_PacketWriter, sizeof(struct Packet) ) ) ) {
         return FALSE;
     }
+
+	LOG0(LOG_DEBUG, "Send Shutdown");
 
     p->pac_Type      = PT_SHUTDOWN;
     p->pac_ConnId    = DEFAULT_CONNECTION;
@@ -527,6 +729,7 @@ VOID APB_Run(Server server)
         switch(srv->srv_State ) {
 
             case SS_STARTING:
+				LOG0(LOG_TRACE, "Starting");
 
                 retryCount = 5;
 
@@ -534,15 +737,18 @@ VOID APB_Run(Server server)
                 break;
 
             case SS_OPENING_REMOTE:
+				LOG0(LOG_TRACE, "Opening Remote");
 
-                if( remoteOpen = APB_OpenRemote(srv->srv_Remote) ) {
-                    srv->srv_State = SS_OPENING_CLIENT;
+                if( remoteOpen = REM_OpenRemote(srv->srv_Remote) ) {
+					APB_SrvBeginRead(srv);
+					srv->srv_State = SS_OPENING_CLIENT;
                 } else {
                     srv->srv_State = SS_STOPPING;
                 }
                 break;
 
             case SS_OPENING_CLIENT:
+				LOG0(LOG_TRACE, "Opening Client");
 
                 if( clientOpen = APB_OpenClient(srv) ) {
                     srv->srv_State = SS_CONNECTING;
@@ -553,6 +759,7 @@ VOID APB_Run(Server server)
                 
 
             case SS_CONNECTING:
+				LOG0(LOG_TRACE, "Connecting");
 
                 if( APB_SendInit(srv) ) {
                     APB_WaitForMessage(srv);
@@ -562,11 +769,14 @@ VOID APB_Run(Server server)
                 break;
 
             case SS_WAIT_FOR_CONNECT:
+				LOG0(LOG_TRACE, "Wait For Connect");
 
                 APB_WaitForMessage(srv);
                 break;
 
             case SS_CONNECT_FAILED:
+				LOG0(LOG_TRACE, "Connect Failed");
+
                 retryCount--;
                 if( retryCount == 0 ) {
                     srv->srv_State = SS_STOPPING;  
@@ -577,15 +787,17 @@ VOID APB_Run(Server server)
 
 
             case SS_CONNECTED:
-				
                 APB_WaitForMessage(srv);
                 break;
 
             case SS_CONNECTION_LOST:
+				LOG0(LOG_TRACE, "Connection Lost");
+
                 srv->srv_State = SS_CONNECTING;
                 break;
 
             case SS_DISCONNECTING:
+				LOG0(LOG_TRACE, "Disconnecting");
 
                 if( APB_SendShutdown(srv) ) {
                     APB_WaitForMessage(srv);
@@ -595,16 +807,19 @@ VOID APB_Run(Server server)
                 break;
 
             case SS_DISCONNECTED:
+				LOG0(LOG_TRACE, "Disconnected");
 
                 srv->srv_State = SS_STOPPING;
                 break;
 
             case SS_STOPPING:
+				LOG0(LOG_TRACE, "Stopping");
 
                 srv->srv_State = SS_CLOSING_CLIENT;
                 break;
 
             case SS_CLOSING_CLIENT:
+				LOG0(LOG_TRACE, "Closing Client");
 
                 APB_DeletePort(srv->srv_ClientPort);
                 srv->srv_ClientPort = NULL;
@@ -613,10 +828,12 @@ VOID APB_Run(Server server)
                 break;
 
             case SS_CLOSING_REMOTE:
+				LOG0(LOG_TRACE, "Closing Remote");
 
-                APB_CloseRemote(srv->srv_Remote);
+                REM_CloseRemote(srv->srv_Remote);
                 srv->srv_State = SS_STOPPED;
                 break;
         }
     }
+	LOG0(LOG_TRACE, "Stopped");
 }

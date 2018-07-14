@@ -3,16 +3,14 @@
 #include "protocol.h"
 #include "memory.h"
 #include "stats.h"
+#include "log.h"
 
 #include "amipiborg.h"
 
 #include <exec/lists.h>
 
-//#include <dos/dos.h>
-
 #include <clib/exec_protos.h>
 #include <clib/alib_protos.h>
-//#include <clib/dos_protos.h>
 
 #include <stdio.h>
 
@@ -41,6 +39,8 @@ VOID APB_CnnConnect(struct Connection *c)
 {
     struct PacketConnect *p;
 
+	LOG1(LOG_DEBUG, "Send Connect %d", c->cnn_Id);
+
     if( ! (p = (struct PacketConnect *)APB_AllocPacket(c->cnn_PacketWriter, sizeof(struct PacketConnect) ) ) ) {
         return;
     }
@@ -55,6 +55,8 @@ VOID APB_CnnConnect(struct Connection *c)
 VOID APB_CnnDisconnect(struct Connection *c)
 {
     struct Packet *p;
+
+	LOG1(LOG_DEBUG, "Send Disconnect %d", c->cnn_Id);
 
     if( ! (p = APB_AllocPacket(c->cnn_PacketWriter, sizeof(struct Packet) ) ) ) {
 		printf("Failed to allocate packet\n");
@@ -79,6 +81,8 @@ Connection APB_CreateConnection(struct List *cnns, ObjectPool objectPool, UWORD 
         return NULL;
     }
 
+	LOG1(LOG_DEBUG, "Create Connection %d", connId);
+
     APB_IncrementStat(ST_CNN_CREATED, 1);
     APB_IncrementStat(ST_CNN_CURRENT, 1);
 
@@ -100,6 +104,8 @@ VOID APB_DestroyConnection(Connection cnn)
     struct Connection *c = (struct Connection *)cnn;
     struct InPacket *ip;
  
+	LOG1(LOG_DEBUG, "Destroy Connect %d", c->cnn_Id);
+
     if( c->cnn_State < CS_DISCONNECTING ) {
         APB_CnnDisconnect(c);
     }
@@ -126,6 +132,8 @@ VOID APB_PushToRemote(struct Connection *c, struct APBRequest *req)
         req->r_State = APB_RS_FAILED;
     } else {
 
+		LOG2(LOG_TRACE, "Conn %d Outgoing Data Packet %d bytes", c->cnn_Id, req->r_Length);
+
         p->pac_ConnId = c->cnn_Id;
         p->pac_Type = PT_DATA;
 
@@ -143,7 +151,6 @@ VOID APB_PushToClient(struct Connection *c)
     struct APBRequest *r;
     struct InPacket *ip;
     UWORD toCopy;
-	BYTE *dest;
 
 	if( c->cnn_State != CS_CONNECTED ) {
 		return;
@@ -159,18 +166,17 @@ VOID APB_PushToClient(struct Connection *c)
 
 		if( r->r_Length < toCopy ) {
 			
+			LOG3(LOG_ERROR, "Conn %d Buffer of %d bytes to small to receive %d bytes", c->cnn_Id, r->r_Length, toCopy);
+
 			r->r_State = APB_RS_BUFFER_TOO_SMALL;
 
             AddHead(PAC_LIST(c), (struct Node *)ip);
 
 		} else {
 
-			CopyMem(ip->ip_Data1, r->r_Data, ip->ip_Data1Length);
-				
-			if( ip->ip_Data2Length > 0 ) {
-				dest = APB_PointerAdd(r->r_Data, ip->ip_Data1Length);
-				CopyMem(ip->ip_Data2, dest, ip->ip_Data2Length);
-			}
+			LOG2(LOG_TRACE, "Conn %d Incoming Data Packet %d bytes", c->cnn_Id, toCopy);
+
+			APB_InPacketToBuffer(ip, r->r_Data);
 
 			r->r_State = APB_RS_OK;
 
@@ -194,6 +200,7 @@ VOID APB_HandleConnectionPacket(Connection cnn, struct InPacket *ip)
     switch( ip->ip_Type ) {
 
         case PT_CONNECTED:
+			LOG1(LOG_TRACE, "Conn %d Connected", c->cnn_Id);
             c->cnn_State = CS_CONNECTED;
             releasePacket = TRUE;
             replyReq = TRUE;
@@ -204,12 +211,14 @@ VOID APB_HandleConnectionPacket(Connection cnn, struct InPacket *ip)
             break;
 
         case PT_DISCONNECTED:
+			LOG1(LOG_TRACE, "Conn %d Disconnected", c->cnn_Id);
             c->cnn_State = CS_DISCONNECTED;
             releasePacket = TRUE;
             destroyCnn = TRUE;
             break;
 
         case PT_NO_HANDLER:
+			LOG1(LOG_ERROR, "Conn %d No Handler", c->cnn_Id);
             c->cnn_State = CS_NO_HANDLER;
             replyReq = TRUE;
             replyReqType = APB_RT_OPEN;
@@ -265,6 +274,9 @@ VOID APB_CnnCheckRequestTimeouts(struct Connection *c)
          req = (struct RequestInt *)req->ri_Req.r_Msg.mn_Node.ln_Succ ) {
 
 		if( req->ri_TimeoutTicks == 1 ) {
+
+			LOG2(LOG_TRACE, "Conn %d Request 0x%x Timed Out", c->cnn_Id, req);
+
 			req->ri_Req.r_State = APB_RS_TIMEOUT;
 
 			Remove((struct Node *)req);
@@ -294,12 +306,14 @@ VOID APB_HandleClientRequest(Connection cnn, struct APBRequest *req)
     switch( req->r_Type ) {
 
         case APB_RT_OPEN:
+			LOG2(LOG_TRACE, "Conn %d Open Handler %d", c->cnn_Id, req->r_HandlerId);
             c->cnn_HandlerId = req->r_HandlerId;
             AddTail(REQ_LIST(c), (struct Node *)req);
             APB_CnnConnect(c);
             break;
 
         case APB_RT_CLOSE:
+			LOG1(LOG_TRACE, "Conn %d Close", c->cnn_Id);
 			reply = TRUE;
 			if(c->cnn_State < CS_DISCONNECTING ) {
                 APB_CnnDisconnect(c);
@@ -307,15 +321,22 @@ VOID APB_HandleClientRequest(Connection cnn, struct APBRequest *req)
             break;
 
         case APB_RT_READ:
+			LOG1(LOG_TRACE, "Conn %d Read", c->cnn_Id);
             switch( c->cnn_State ) {
 
                 case CS_DISCONNECTING:
                 case CS_DISCONNECTED:
+
+					LOG1(LOG_ERROR, "Conn %d Cannot Read while disconnecting or disconnected", c->cnn_Id);
+
                     req->r_State = APB_RS_NOT_CONNECTED;
                     reply = TRUE;
                     break;        
 
                 case CS_NO_HANDLER:
+
+					LOG1(LOG_TRACE, "Conn %d Cannot Read without a handler", c->cnn_Id);
+
                     req->r_State = APB_RS_NO_HANDLER;
                     reply = TRUE;
                     break;
@@ -333,11 +354,15 @@ VOID APB_HandleClientRequest(Connection cnn, struct APBRequest *req)
 
                 case CS_DISCONNECTING:
                 case CS_DISCONNECTED:
+					LOG1(LOG_ERROR, "Conn %d Cannot Write while disconnecting or disconnected", c->cnn_Id);
+
                     req->r_State = APB_RS_NOT_CONNECTED;
                     reply = TRUE;
                     break;        
 
                 case CS_NO_HANDLER:
+					LOG1(LOG_TRACE, "Conn %d Cannot Write without a handler", c->cnn_Id);
+
                     req->r_State = APB_RS_NO_HANDLER;
                     reply = TRUE;
                     break;

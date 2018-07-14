@@ -42,4 +42,6 @@ UWORD APB_ReaderQueueSize(PacketReader pr);
 
 struct InPacket *APB_DequeueInPacket(PacketReader pr);
 
+UWORD APB_InPacketToBuffer(struct InPacket *ip, APTR buf);
+
 #endif // __APB_BUFFER_H__

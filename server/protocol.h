@@ -58,13 +58,6 @@ struct PacketInit
     UWORD pi_MaxPacketSize;
 };
 
-struct PacketHello
-{
-	struct Packet ph_Pac;
-	UWORD ph_Version;
-	UWORD ph_HandlerCount;
-};
-
 struct PacketConnect
 {
 	struct Packet pc_Pac;
@@ -83,10 +76,16 @@ struct PacketResend
     UWORD pr_PacketId;
 };
 
+struct PacketHello
+{
+	UWORD ph_Version;
+	UWORD ph_HandlerCount;
+};
+
 struct HandlerDesc
 {
 	UWORD hd_HandlerId;
-	UBYTE hd_HandlerName;
+	BYTE hd_HandlerName[10];
 };
 
 UWORD APB_CalculateChecksum(UWORD *data, UWORD length);

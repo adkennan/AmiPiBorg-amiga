@@ -1,7 +1,6 @@
 
 #include "remote.h"
 #include "server.h"
-#include "buffer.h"
 #include "stats.h"
 #include "protocol.h"
 
@@ -22,7 +21,9 @@ struct Remote
     struct MsgPort     *r_WritePort;
     struct IOExtSer    *r_ReadReq;
     struct IOExtSer    *r_WriteReq;
-    struct Buffer      *r_ReadBuffer;
+    BYTE		       *r_ReadBuffer;
+	UWORD				r_ReadBufLen;
+	UWORD				r_BytesRead;
     BOOL                r_ReadReady;
     BOOL                r_WriteReady;    
 };
@@ -44,86 +45,53 @@ Remote APB_CreateRemote(MemoryPool memPool, ObjectPool objPool)
     r->r_ReadReady = FALSE;
     r->r_WriteReady = FALSE;
     r->r_ReadBuffer = NULL;
+	r->r_ReadBufLen = 0;
+	r->r_BytesRead = 0;
 
     return r;
 }
 
-struct Buffer *APB_GetReadBuffer(struct Remote *r, UWORD *length)
-{
-    struct Buffer *buf = r->r_ReadBuffer;
-
-    if( buf == NULL || buf->b_Offset == BUFFER_SIZE ) {
-
-        if( ! ( buf = APB_AllocateBuffer(r->r_ObjPool) ) ) {
-            return NULL;
-        }
-
-        r->r_ReadBuffer = buf;
-    }
-
-	if( *length > BUFFER_SIZE - buf->b_Offset ) {
-        *length = BUFFER_SIZE - buf->b_Offset;
-    }
-
-    return buf;
-}
-
 VOID APB_BeginRead(struct Remote *r)
 {
-    struct Buffer *buf;
     struct IOExtSer *req = r->r_ReadReq;
-    UWORD length = sizeof(struct Packet);
 
-    if( ! (buf = APB_GetReadBuffer(r, &length) ) ) {
-        return;
-    }
-    
+	r->r_BytesRead = 0;
+
     req->IOSer.io_Command = CMD_READ;
     req->IOSer.io_Length = 1;
-    req->IOSer.io_Data = APB_PointerAdd(buf->b_Data, buf->b_Offset);
+    req->IOSer.io_Data = r->r_ReadBuffer;
 
     SendIO((struct IORequest *)req);
 }
 
 VOID APB_ContinueRead(struct Remote *r)
 {
-    struct Buffer *buf;
     struct IOExtSer *req = r->r_ReadReq;
-    UWORD size, ix;
+    UWORD size;
 
-//	printf("R (%d): %02x\n",  req->IOSer.io_Actual, *(UBYTE *)APB_PointerAdd(r->r_ReadBuffer->b_Data, r->r_ReadBuffer->b_Offset));
-
-    r->r_ReadBuffer->b_Offset += req->IOSer.io_Actual;
-
+    r->r_BytesRead += req->IOSer.io_Actual;
+	
     req->IOSer.io_Command = SDCMD_QUERY;
 
     DoIO((struct IORequest *)req);
 
-    if( req->IOSer.io_Actual == 0 ) {
+	size = r->r_ReadBufLen - r->r_BytesRead;
+
+    if( req->IOSer.io_Actual == 0 || size == 0 ) {
         return;
     }
 
-    size = req->IOSer.io_Actual > BUFFER_SIZE ? BUFFER_SIZE : req->IOSer.io_Actual;
-
-    if( ! (buf = APB_GetReadBuffer(r, &size) ) ) {
-        return;
-    }
+	if( size > req->IOSer.io_Actual ) {
+	    size = req->IOSer.io_Actual;
+	}
 
     req->IOSer.io_Command = CMD_READ;
     req->IOSer.io_Length = size;
-    req->IOSer.io_Data = APB_PointerAdd(buf->b_Data, buf->b_Offset);
+    req->IOSer.io_Data = r->r_ReadBuffer + r->r_BytesRead;
 
     DoIO((struct IORequest *)req);
 
-//	printf("R (%d, %d): ", size, req->IOSer.io_Actual);
-//	if( size != req->IOSer.io_Actual ) {
-//		for( ix = 0; ix < size; ix++ ) {
-//			printf("%02x ", *(UBYTE *)APB_PointerAdd(buf->b_Data, buf->b_Offset + ix));
-//		}
-//	}
-//	printf("\n");
-
-    buf->b_Offset += size;
+    r->r_BytesRead += size;
 }
 
 
@@ -148,7 +116,7 @@ BOOL APB_OpenRemote(Remote remote)
                         writeReq->IOSer.io_Command = SDCMD_SETPARAMS;
                         writeReq->io_SerFlags &= ~SERF_PARTY_ON;
                         writeReq->io_SerFlags |= SERF_XDISABLED;
-                        writeReq->io_Baud = 9600;
+                        writeReq->io_Baud = 19200;
                         DoIO((struct IORequest *)writeReq);
 
                         writeReq->IOSer.io_Command = CMD_FLUSH;
@@ -164,8 +132,6 @@ BOOL APB_OpenRemote(Remote remote)
 
                         r->r_ReadReady = FALSE;
                         r->r_WriteReady = TRUE;
-
-                        APB_BeginRead(r);
 
                         return TRUE;
                     }
@@ -210,10 +176,6 @@ VOID APB_CloseRemote(Remote remote)
         DeleteExtIO((struct IORequest *)r->r_WriteReq);
     }
 
-    if( r->r_ReadBuffer ) {
-        APB_ReleaseBuffer(r->r_ReadBuffer);
-    }
-
     r->r_ReadPort = NULL;
     r->r_WritePort = NULL;
     r->r_ReadReq = NULL;
@@ -221,6 +183,8 @@ VOID APB_CloseRemote(Remote remote)
     r->r_ReadReady = FALSE;
     r->r_WriteReady = FALSE;
     r->r_ReadBuffer = NULL;
+	r->r_ReadBufLen = 0;
+	r->r_BytesRead = 0;
 }
 
 VOID APB_DestroyRemote(Remote remote)
@@ -294,15 +258,23 @@ BOOL APB_CanReceiveFromRemote(Remote remote)
     return r->r_ReadReady;
 }
 
-struct Buffer *APB_ReceiveFromRemote(Remote remote)
+VOID APB_ReceiveFromRemote(Remote remote, BYTE *data, UWORD length)
 {
     struct Remote *r = (struct Remote *)remote;
-    struct Buffer *buf = r->r_ReadBuffer;
+
+	r->r_ReadBuffer = data;
+	r->r_ReadBufLen = length;
+	r->r_BytesRead = 0;	
 
     r->r_ReadReady = FALSE;
 
     APB_BeginRead(r);
-        
-    return buf;
+}
+
+UWORD APB_BytesReceived(Remote remote)
+{
+    struct Remote *r = (struct Remote *)remote;
+
+	return r->r_BytesRead;
 }
 

@@ -4,6 +4,7 @@
 #include "stats.h"
 #include "memory.h"
 #include "protocol.h"
+#include "log.h"
 
 #include <clib/exec_protos.h>
 #include <clib/alib_protos.h>
@@ -41,6 +42,7 @@ PacketReader APB_CreatePacketReader(MemoryPool memPool, ObjectPool objPool)
     struct PacketReader *pr;
 
     if( ! (pr = APB_AllocMem(memPool, sizeof(struct PacketReader) ) ) ) {
+		LOG0(LOG_ERROR, "Unable to allocate memory for PacketReader");
         return NULL;
     }
 
@@ -63,6 +65,8 @@ PacketReader APB_CreatePacketReader(MemoryPool memPool, ObjectPool objPool)
 
 VOID APB_ReleaseInBuffer(struct InBuffer *ib)
 {
+	LOG1(LOG_TRACE, "Release InBuffer 0x%x", ib);
+
     APB_ReleaseBuffer(ib->ib_Buf);
 
     APB_FreeObject(ib->ib_Reader->pr_ObjPool, OT_IN_BUFFER, ib);
@@ -74,6 +78,9 @@ VOID APB_DestroyPacketReader(PacketReader packetReader)
 {
     struct PacketReader *pr = (struct PacketReader *)packetReader;
 	struct InBuffer *ib = pr->pr_InBuf;
+
+	LOG0(LOG_TRACE, "Destroy PacketReader");
+
 	while( ib != NULL ) {
 		ib = ib->ib_Next;
 	}
@@ -111,6 +118,8 @@ BOOL APB_AppendBuffer(struct PacketReader *pr, struct Buffer *buf)
 
         } else {
 
+			LOG1(LOG_TRACE, "Allocated InBuffer 0x%x", ib);
+
             APB_IncrementStat(ST_IB_ALLOCATED, 1);
             ib->ib_Next = NULL;
             ib->ib_Reader = pr;
@@ -144,7 +153,7 @@ VOID APB_ProcessBuffer(PacketReader packetReader, struct Buffer *buf)
     struct InBuffer  *ib1, *ib2;
     struct InPacket  *ip;
 	struct Packet	  p;
-	UWORD bc, dataLen1, dataLen2, consumed, dl, pc, oddSize;
+	UWORD bc, dataLen1, dataLen2, consumed, dl, oddSize;
 	BYTE *data1, *data2;
 	ULONG sum;
 
@@ -153,8 +162,6 @@ VOID APB_ProcessBuffer(PacketReader packetReader, struct Buffer *buf)
     }
     
     ib1 = pr->pr_InBuf;
-
-	pc = 0;
 
     while( ib1 != NULL && ib1->ib_Offset <= BUF_BYTES(ib1) ) {
 		
@@ -196,12 +203,12 @@ VOID APB_ProcessBuffer(PacketReader packetReader, struct Buffer *buf)
 		}
 
         if( p.pac_Id != PACKET_ID ) {
-			printf("%d: Invalid packet id %x\n", pc, p.pac_Id);
+			LOG1(LOG_ERROR, "Invalid packet id %x", p.pac_Id);
 			goto badData;
         }
 
 		if( p.pac_Length > BUFFER_SIZE ) {
-			printf("%d: Invalid packet length: %d\n", pc, p.pac_Length);
+			LOG1(LOG_ERROR, "Invalid packet length %d", p.pac_Length);
 			goto badData;
 		}
 
@@ -249,7 +256,7 @@ VOID APB_ProcessBuffer(PacketReader packetReader, struct Buffer *buf)
 
 					consumed = dataLen2;
 
-					if( BUF_BYTES(ib2) < dataLen2 ) {
+					if( BUF_BYTES(ib2) < dataLen2 + oddSize ) {
 						break;
 					}	
 
@@ -289,7 +296,7 @@ VOID APB_ProcessBuffer(PacketReader packetReader, struct Buffer *buf)
 		}
 
 		if( APB_CompleteChecksum(sum) != 0xFFFF ) {
-			printf("%d: Invalid checksum, %x\n", pc, APB_CompleteChecksum(sum));
+			LOG1(LOG_ERROR, "Invalid checksum, %x", APB_CompleteChecksum(sum));
 			goto badData;
 		}
 
@@ -310,6 +317,8 @@ VOID APB_ProcessBuffer(PacketReader packetReader, struct Buffer *buf)
         ip->ip_Data2Length = dataLen2;
         ip->ip_Data2 = data2;
         ip->ip_Offset = 0;
+
+		LOG2(LOG_TRACE, "InPacket id = %d, data length = %d", p.pac_PackId, dataLen1 + dataLen2);
 
         AddTail(PR_QUEUE(pr), (struct Node *)ip);
         pr->pr_QueueSize++;
@@ -336,8 +345,6 @@ VOID APB_ProcessBuffer(PacketReader packetReader, struct Buffer *buf)
             ib1 = ib1->ib_Next;
         }
 
-		pc++;
-
 		continue;
 
 badData:
@@ -354,9 +361,8 @@ badData:
 
 		APB_IncrementStat(ST_IP_INVALID_DATA, 1);
 
-
 		if( BUF_BYTES(ib1) > BUFFER_SIZE ) {
-			printf("WTF!\n");
+			LOG3(LOG_ERROR, "InBuffer 0x%x, %d bytes greater than max of %d", ib1, BUF_BYTES(ib1), BUFFER_SIZE);
 			break;
 		}
 
@@ -367,6 +373,8 @@ badData:
 VOID APB_ReleaseInPacket(struct InPacket *ip)
 {
     struct InBuffer *ib = ip->ip_InBuf;
+
+	LOG1(LOG_TRACE, "Release InPacket 0x%x", ip);
 
     APB_FreeObject(ib->ib_Reader->pr_ObjPool, OT_IN_PACKET, ip);
 
@@ -406,3 +414,12 @@ struct InPacket *APB_DequeueInPacket(PacketReader packetReader)
     return (struct InPacket *)RemHead(PR_QUEUE(pr));
 }
 
+UWORD APB_InPacketToBuffer(struct InPacket *ip, APTR buf)
+{
+	CopyMem(ip->ip_Data1, buf, ip->ip_Data1Length);
+	if( ip->ip_Data2Length > 0 ) {
+		CopyMem(ip->ip_Data2, APB_PointerAdd(buf, ip->ip_Data1Length), ip->ip_Data2Length);
+	}
+
+	return (UWORD)(ip->ip_Data1Length + ip->ip_Data2Length);
+}

@@ -4,6 +4,11 @@
 #include "stats.h"
 #include "memory.h"
 #include "protocol.h"
+#include "remote.h"
+#include "log.h"
+
+#include "remote_protos.h"
+#include "remote_pragmas.h"
 
 #include <clib/exec_protos.h>
 #include <clib/alib_protos.h>
@@ -44,8 +49,6 @@ struct PacketWriter
 #define PW_QUEUE(pw) ((struct List *)&pw->pw_Queue)
 #define PW_PACKS(pw) ((struct List *)&pw->pw_RecentPackets)
 
-// Packet Writer
-
 PacketWriter APB_CreatePacketWriter(MemoryPool memPool, ObjectPool objPool)
 {
     struct PacketWriter *pw;
@@ -59,7 +62,7 @@ PacketWriter APB_CreatePacketWriter(MemoryPool memPool, ObjectPool objPool)
     }
 
     if( ! (pw = APB_AllocMem(memPool, sizeof(struct PacketWriter) ) ) ) {
-
+		LOG0(LOG_ERROR, "Unable to allocate memory for PacketWriter");
         return NULL;
     }
 
@@ -77,12 +80,15 @@ PacketWriter APB_CreatePacketWriter(MemoryPool memPool, ObjectPool objPool)
 
 VOID APB_ReleaseOutBuffer(struct PacketWriter *pw, struct OutBuffer *ob)
 {
+	LOG1(LOG_TRACE, "Release OutBuffer 0x%x", ob);
 	APB_ReleaseBuffer(ob->ob_Buf);
 	APB_FreeObject(pw->pw_ObjPool, OT_OUT_BUFFER, ob);
 }
 
 VOID APB_ReleaseOutPacket(struct PacketWriter *pw, struct OutPacket *op)
 {	
+	LOG1(LOG_TRACE, "Release OutPacket 0x%x", op);
+
 	op->op_OutBuf->ob_PacketCount--;
 	if( op->op_OutBuf->ob_PacketCount == 0 && op->op_OutBuf->ob_CanRelease ) {
 		APB_ReleaseOutBuffer(pw, op->op_OutBuf);
@@ -93,6 +99,8 @@ VOID APB_ReleaseOutPacket(struct PacketWriter *pw, struct OutPacket *op)
 VOID APB_DestroyPacketWriter(PacketWriter packetWriter)
 {
     struct PacketWriter *pw = (struct PacketWriter *)packetWriter;
+
+	LOG0(LOG_TRACE, "Destroy Packet Writer");
 
     while(!IsListEmpty(PW_QUEUE(pw))) {
 
@@ -122,14 +130,17 @@ struct Packet *APB_AllocPacketWithId(PacketWriter packetWriter, UWORD length, UW
 	struct OutPacket *op;
 	struct OutPacket *op2;
 
+	LOG2(LOG_TRACE, "Allocate Packet Id = %d, Length = %d", packId, length);
+
     if( length > BUFFER_SIZE ) {
         // Packet too big!
+		LOG1(LOG_ERROR, "Packet size %d too large", length);
         return NULL;
     }
 
     if( length < sizeof(struct Packet) ) {
         // Packet length too small.
-
+		LOG1(LOG_ERROR, "Packet size %d too small", length);
         return NULL;
     }
 
@@ -139,16 +150,15 @@ struct Packet *APB_AllocPacketWithId(PacketWriter packetWriter, UWORD length, UW
         || (ob->ob_Buf->b_Offset + length + 1) >= BUFFER_SIZE ) // No room left in buffer
 
     {
+		LOG0(LOG_TRACE, "Allocate New OutBuffer");
+
 		if( ! (ob = (struct OutBuffer *)APB_AllocObject(pw->pw_ObjPool, OT_OUT_BUFFER) ) ) {
 			return NULL;
 		}
 
         if( ! (ob->ob_Buf = APB_AllocateBuffer(pw->pw_ObjPool) ) ) {
-            // Can't get a buffer!
             return NULL;
         }
-
-		printf("Write Buffer: %04x\n", ob->ob_Buf);
 
 		ob->ob_Offset = 0;
 		ob->ob_PacketCount = 0;
@@ -163,6 +173,7 @@ struct Packet *APB_AllocPacketWithId(PacketWriter packetWriter, UWORD length, UW
     }
 
 	if( ! (op = (struct OutPacket *)APB_AllocObject(pw->pw_ObjPool, OT_OUT_PACKET) ) ) {	
+		LOG0(LOG_ERROR, "Failed to allocate outgoing packet");
 		return NULL;
 	}
 
@@ -208,7 +219,7 @@ struct Packet *APB_AllocPacketWithId(PacketWriter packetWriter, UWORD length, UW
 VOID APB_WriteBuffer(PacketWriter packetWriter, Remote remote)
 {
     struct PacketWriter *pw = (struct PacketWriter *)packetWriter;
-	UWORD bc, ps;
+	UWORD bc, ps;//, ix;
 	BYTE *data;
 	struct OutBuffer *ob;
 	struct OutPacket *op;
@@ -225,16 +236,24 @@ VOID APB_WriteBuffer(PacketWriter packetWriter, Remote remote)
 			 op = (struct OutPacket *)op->op_Node.mln_Succ ) {
 
 			if( op->op_OutBuf == ob && ! op->op_Sent ) {
+
+				LOG1(LOG_TRACE, "Sending Packet %d", op->op_Pac->pac_PackId);
+
 				ps = sizeof(struct Packet) + op->op_Pac->pac_Length + (op->op_Pac->pac_Length % 2 == 1  ? 1 : 0);
 				op->op_Pac->pac_Checksum = APB_CalculateChecksum((UWORD *)op->op_Pac, ps);
 				op->op_Sent = TRUE;
-			}
+			} 
 		}
 
 		bc = ob->ob_Buf->b_Offset - ob->ob_Offset;
 		data = APB_PointerAdd(ob->ob_Buf->b_Data, ob->ob_Offset);
 
-		APB_SendToRemote(remote, data, bc);
+		if( APB_ShouldLog(LOG_TRACE) ) {
+			APB_Log(__FILE__, __LINE__, __FUNC__, LOG_TRACE, "Write %d bytes", bc);
+			APB_LogMem(__FILE__, __LINE__, __FUNC__, LOG_TRACE, data, bc);
+		}
+
+		REM_Write(remote, data, bc);
 
 	    APB_IncrementStat(ST_BYTES_SENT, bc);            
 

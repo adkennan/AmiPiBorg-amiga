@@ -22,11 +22,7 @@ int main(int argc, char **argv)
 
     	    APB_Run(srv);
 
-        	printf("Destroying Server\n");
-
 	        APB_DestroyServer(srv);
-
-    	    printf("Done.\n");
 
 		    APB_DumpStats();
 	    }

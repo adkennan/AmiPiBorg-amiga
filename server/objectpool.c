@@ -2,6 +2,7 @@
 #include "memory.h"
 #include "objectpool.h"
 #include "stats.h"
+#include "log.h"
 
 #include <exec/lists.h>
 
@@ -11,7 +12,6 @@
 #include <stdio.h>
 
 // Object Type
-
 
 struct ObjectType {
     struct MinNode  ot_Node;
@@ -46,6 +46,8 @@ struct ObjectPool {
 
 VOID APB_DestroyInstance(MemoryPool memPool, struct ObjectType *ot, struct MinNode *obj)
 {
+//	LOG2(LOG_TRACE, "Destroy Object 0x%00000000x, Type %d", obj, ot->ot_Id);
+
     APB_FreeMem(memPool, obj, NODE_SIZE(ot));
 
     ot->ot_InstanceCount--;
@@ -62,8 +64,10 @@ VOID APB_DestroyObjectType(MemoryPool memPool, struct ObjectType *ot)
     }
 
     if( ot->ot_InUseCount > 0 ) {
-        printf("WARNING: Object Type %d has %d unreleased instances.\n", ot->ot_Id, ot->ot_InUseCount);
+        LOG2(LOG_INFO, "WARNING: Object Type %d has %d unreleased instances.", ot->ot_Id, ot->ot_InUseCount);
     }
+
+	LOG1(LOG_TRACE, "Destroy Object Type %d", ot->ot_Id);
 
     APB_FreeMem(memPool, ot, sizeof(struct ObjectType));
     APB_IncrementStat(ST_OBJ_TYPE_COUNT, -1);
@@ -74,10 +78,12 @@ struct MinNode *APB_CreateInstance(MemoryPool memPool, struct ObjectType *ot)
     struct MinNode *obj;
 
     if( ot->ot_InstanceCount >= ot->ot_MaxInstances ) {
-        return NULL; // No more objects allowed.
+		LOG2(LOG_ERROR, "Type %d, limit of %d instances reached", ot->ot_Id, ot->ot_MaxInstances);
+        return NULL;
     }
 
     if( ! (obj = (struct MinNode *)APB_AllocMem(memPool, NODE_SIZE(ot) ) ) ) {
+		LOG1(LOG_ERROR, "Unable to create instance of type %d", ot->ot_Id);
         return NULL; // No more RAM!
     }
 
@@ -85,6 +91,8 @@ struct MinNode *APB_CreateInstance(MemoryPool memPool, struct ObjectType *ot)
 
     APB_IncrementStat(ST_OBJ_CREATE_COUNT, 1);
     APB_IncrementStat(ST_OBJ_INSTANCE_COUNT, 1);
+
+//	LOG2(LOG_TRACE, "Create Object 0x%00000000x, Type %d", obj, ot->ot_Id);
 
     return obj;
 }
@@ -96,8 +104,6 @@ struct MinNode *APB_AllocInstance(MemoryPool memPool, struct ObjectType *ot)
     if( ot->ot_InUseCount == ot->ot_InstanceCount ) {
 
         if( !(obj = APB_CreateInstance(memPool, ot) ) ) {
-        
-            // Can't allocate an object.
             return NULL;
         }                    
 
@@ -111,6 +117,8 @@ struct MinNode *APB_AllocInstance(MemoryPool memPool, struct ObjectType *ot)
 
     APB_IncrementStat(ST_OBJ_ALLOC_COUNT, 1);
     APB_IncrementStat(ST_OBJ_CURRENT_ALLOCATED, 1);
+
+	LOG2(LOG_TRACE, "Allocate Object 0x%00000000x, Type %d", obj, ot->ot_Id);
 
     return obj;        
 }
@@ -129,6 +137,8 @@ VOID APB_ReleaseInstance(MemoryPool memPool, struct ObjectType *ot, struct MinNo
         AddTail(INST_LIST(ot), (struct Node *)obj);
     }
 
+	LOG2(LOG_TRACE, "Release Object 0x%00000000x, Type %d", obj, ot->ot_Id);
+
     ot->ot_InUseCount--;
 }
 
@@ -140,11 +150,14 @@ ObjectPool APB_CreateObjectPool(MemoryPool memPool)
     struct ObjectPool *p;
 
     if( ! (p = APB_AllocMem(memPool, sizeof(struct ObjectPool)) ) ) {
+		LOG0(LOG_ERROR, "Unable to create object pool");
         return NULL;
     }
 
     NewList(TYPE_LIST(p));
     p->op_MemPool = memPool;
+
+	LOG0(LOG_TRACE, "Created Object Pool");
 
     return p;
 }
@@ -160,6 +173,8 @@ VOID APB_DestroyObjectPool(ObjectPool pool)
     }
 
     APB_FreeMem(op->op_MemPool, op, sizeof(struct ObjectPool));    
+
+	LOG0(LOG_TRACE, "Destroyed Object Pool");
 }
 
 struct ObjectType *APB_GetObjectType(struct ObjectPool *op, UWORD id)
@@ -199,12 +214,12 @@ VOID APB_RegisterObjectType(ObjectPool  pool
     struct MinNode *obj;
 
     if( ot = APB_GetObjectType(op, id) ) {
-        printf("Type %d exists.\n", id);
+        LOG1(LOG_ERROR, "Type %d exists.", id);
         return;
     }
     
     if( !(ot = APB_AllocMem(op->op_MemPool, sizeof(struct ObjectType) ) ) ) {
-
+		LOG1(LOG_ERROR, "Cannot create type %d", id);
         return;
     }
     
@@ -216,6 +231,8 @@ VOID APB_RegisterObjectType(ObjectPool  pool
     ot->ot_InUseCount       = 0;    
 
     NewList(INST_LIST(ot));
+
+	LOG1(LOG_TRACE, "Register Object Type %d", ot->ot_Id);
 
     while(ot->ot_InstanceCount < ot->ot_MinInstances ) {
         if( !(obj = APB_CreateInstance(op->op_MemPool, ot) ) ) {

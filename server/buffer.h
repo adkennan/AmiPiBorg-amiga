@@ -7,6 +7,7 @@
 #include "objectpool.h"
 
 #define BUFFER_SIZE 256
+
 #define MIN_BUFFERS 8
 #define MAX_BUFFERS 16
 
@@ -18,11 +19,11 @@ struct Buffer
     UBYTE               b_Data[BUFFER_SIZE];
 };
 
+#define BUF_CURR(buf) (APB_PointerAdd(buf->b_Data, buf->b_Offset))
+#define BUF_AVAIL(buf) (BUFFER_SIZE - buf->b_Offset)
+#define BUF_FULL(buf) (BUFFER_SIZE == buf->b_Offset)
+
 #define BUF_NODE(buf) ((struct Node *)&buf->b_Node)
-
-UWORD APB_BufferLength(struct Buffer *buf);
-
-UBYTE *APB_BufferData(struct Buffer *buf);
 
 struct Buffer *APB_AllocateBuffer(ObjectPool objPool);
 
