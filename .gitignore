@@ -55,4 +55,6 @@ dkms.conf
 bin/*
 *.auts.info
 *.auts
+*.c.info
+*.h.info
 
