@@ -1,0 +1,17 @@
+##base _RemoteBase
+##bias 30
+##public
+REM_CreateRemote()
+REM_DestroyRemote(remote)(a0)
+REM_GetArgTemplate(remote)(a0)
+REM_ConfigureRemote(remote,args)(a0/a1)
+REM_OpenRemote(remote)(a0)
+REM_CloseRemote(remote)(a0)
+REM_GetSignalBits(remote)(a0)
+REM_HandleSignal(remote,signalBits)(a0,d0)
+REM_CanRead(remote)(a0)
+REM_Read(remote,data,length)(a0/a1,d0)
+REM_BytesRead(remote)(a0)
+REM_CanWrite(remote)(a0)
+REM_Write(remote,data,length)(a0/a1,d0)
+##end

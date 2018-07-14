@@ -1,0 +1,13 @@
+#pragma libcall RemoteBase REM_CreateRemote 1e 0
+#pragma libcall RemoteBase REM_DestroyRemote 24 801
+#pragma libcall RemoteBase REM_GetArgTemplate 2a 801
+#pragma libcall RemoteBase REM_ConfigureRemote 30 9802
+#pragma libcall RemoteBase REM_OpenRemote 36 801
+#pragma libcall RemoteBase REM_CloseRemote 3c 801
+#pragma libcall RemoteBase REM_GetSignalBits 42 801
+#pragma libcall RemoteBase REM_HandleSignal 48 0802
+#pragma libcall RemoteBase REM_CanRead 4e 801
+#pragma libcall RemoteBase REM_Read 54 09803
+#pragma libcall RemoteBase REM_BytesRead 5a 801
+#pragma libcall RemoteBase REM_CanWrite 60 801
+#pragma libcall RemoteBase REM_Write 66 09803
