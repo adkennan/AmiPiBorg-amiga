@@ -1,0 +1,74 @@
+.key HELP/S,CLEAN/S,INDENT/S
+
+IF <HELP$NOHELP> EQ HELP
+	ECHO "Options: "
+	ECHO "  HELP/S      Show this help message."
+	ECHO "  CLEAN/S     Remoe object files, binaries and backup files."
+	ECHO "  INDENT/S    Run INDENT on all source files."
+	ECHO
+	QUIT
+ENDIF
+
+IF <INDENT$NOINDENT> EQ INDENT 
+
+	IF NOT EXISTS C:INDENT
+		ECHO "C:INDENT not found."
+		QUIT
+	ENDIF
+
+	ECHO "Formatting Source"
+
+	ECHO "Clients"
+	c:indent clients/#?/#?.c
+	ECHO "Includes"
+	c:indent include/#?.h
+	ECHO "Library"
+	c:indent library/#?.h library/#?.c
+	ECHO "Remotes"
+	c:indent remote/#?.c
+	ECHO "Server"
+	c:indent server/#?.h server/#?.c
+
+	QUIT
+
+ENDIF
+
+IF <CLEAN$NOTCLEAN> EQ CLEAN
+	ECHO "Cleaning"
+ELSE
+	ECHO "Compiling"
+ENDIF
+
+ECHO "Library"
+CD library
+SMAKE <CLEAN>
+CD /
+
+ECHO "Remotes"
+CD remote
+SMAKE <CLEAN>
+CD /
+
+ECHO "Server"
+CD server
+SMAKE <CLEAN>
+CD /
+
+ECHO "Clients"
+
+ECHO "  ApbDate"
+CD clients/ApbDate
+SMAKE <CLEAN>
+CD //
+
+ECHO "  ApbInput"
+CD clients/ApbInput
+SMAKE <CLEAN>
+CD //
+
+ECHO "  ApbPing"
+CD clients/ApbPing
+SMAKE <CLEAN>
+CD //
+
+

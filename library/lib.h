@@ -15,31 +15,36 @@
 #define CNN_MSG_TIMEOUT 5
 
 struct AmiPiBorgLibrary {
-    struct Library          l_Lib;
-    UWORD                   l_Pad;
-    BPTR                    l_SegList;
-    struct Library         *l_ExecBase;
+    struct Library l_Lib;
+    UWORD     l_Pad;
+    BPTR      l_SegList;
+    struct Library *l_ExecBase;
 };
 
 struct Connection {
-    struct MsgPort         *c_MsgPort;
-	APTR 					c_MemPool;
-	UWORD            		c_Status;
-	UWORD 					c_HandlerId;
-	UWORD 					c_ConnId;
+    struct MsgPort *c_MsgPort;
+    APTR      c_MemPool;
+    UWORD     c_Status;
+    UWORD     c_HandlerId;
+    UWORD     c_ConnId;
 };
 
 struct RequestInt {
-	struct APBRequest 		r_Req;
-	struct Connection 	   *r_Conn;
-	UWORD					r_TimeoutTicks;
+    struct APBRequest r_Req;
+    struct Connection *r_Conn;
+    UWORD     r_TimeoutTicks;
 };
 
-VOID *APB_AllocMem(APTR memPool, ULONG memSize);
+VOID     *APB_AllocMem(
+    APTR memPool,
+    ULONG memSize);
 
-VOID APB_FreeMem(APTR memPool, VOID *mem, ULONG memSize);
+VOID      APB_FreeMem(
+    APTR memPool,
+    VOID * mem,
+    ULONG memSize);
 
-BOOL APB_PutMsg(struct Message *msg);
+BOOL      APB_PutMsg(
+    struct Message *msg);
 
 #endif
-

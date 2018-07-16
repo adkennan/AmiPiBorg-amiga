@@ -12,12 +12,12 @@
 #include <stdio.h>
 #endif
 
-struct Pool
-{
-    APTR p_MemPool;
+struct Pool {
+    APTR      p_MemPool;
 };
 
-VOID APB_MemIncrementStats(LONG size)
+VOID APB_MemIncrementStats(
+    LONG size)
 {
     APB_IncrementStat(ST_MEM_ALLOC_COUNT, 1);
     APB_IncrementStat(ST_MEM_TOTAL_ALLOCATED, size);
@@ -28,7 +28,8 @@ VOID APB_MemIncrementStats(LONG size)
 #endif
 }
 
-VOID APB_MemDecrementStats(LONG size)
+VOID APB_MemDecrementStats(
+    LONG size)
 {
     APB_IncrementStat(ST_MEM_FREE_COUNT, 1);
     APB_IncrementStat(ST_MEM_TOTAL_FREED, size);
@@ -41,31 +42,33 @@ VOID APB_MemDecrementStats(LONG size)
 
 #ifdef APB_USE_MEMPOOL
 
-MemoryPool APB_CreatePool(VOID)
+MemoryPool APB_CreatePool(
+    VOID)
 {
-    APTR mp;
+    APTR      mp;
     struct Pool *p;
 
-    if( ! (mp = CreatePool(MEMF_ANY, 4096, 2048) ) ) {
+    if(!(mp = CreatePool(MEMF_ANY, 4096, 2048))) {
         return NULL;
     }
 
-    if( ! (p = AllocPooled(mp, sizeof(struct Pool) ) ) ) {
+    if(!(p = AllocPooled(mp, sizeof(struct Pool)))) {
         DeletePool(mp);
         return NULL;
     }
 
     APB_MemIncrementStats(sizeof(struct Pool));
-    
+
     p->p_MemPool = mp;
 
     return p;
 }
 
-VOID APB_DestroyPool(MemoryPool pool)
-{    
-    APTR mp;
-    struct Pool *p = (struct Pool *)pool;
+VOID APB_DestroyPool(
+    MemoryPool pool)
+{
+    APTR      mp;
+    struct Pool *p = (struct Pool *) pool;
 
     mp = p->p_MemPool;
 
@@ -76,79 +79,92 @@ VOID APB_DestroyPool(MemoryPool pool)
     DeletePool(mp);
 }
 
-VOID *APB_AllocMem(MemoryPool pool, ULONG size)
+VOID     *APB_AllocMem(
+    MemoryPool pool,
+    ULONG size)
 {
-    struct Pool *p = (struct Pool *)pool;
-    VOID *mem;
+    struct Pool *p = (struct Pool *) pool;
+    VOID     *mem;
 
-    if( ! ( mem = AllocPooled(p->p_MemPool, size) ) ) {
+    if(!(mem = AllocPooled(p->p_MemPool, size))) {
         return NULL;
     }
-    
-    APB_MemIncrementStats((LONG)size);
+
+    APB_MemIncrementStats((LONG) size);
 
     return mem;
 }
 
-VOID APB_FreeMem(MemoryPool pool, VOID *memory, ULONG size)
+VOID APB_FreeMem(
+    MemoryPool pool,
+    VOID * memory,
+    ULONG size)
 {
-    struct Pool *p = (struct Pool *)pool;
+    struct Pool *p = (struct Pool *) pool;
 
     FreePooled(p->p_MemPool, memory, size);
 
-    APB_MemDecrementStats((LONG)size);
+    APB_MemDecrementStats((LONG) size);
 }
 
 #else
 
-MemoryPool APB_CreatePool(VOID)
+MemoryPool APB_CreatePool(
+    VOID)
 {
     struct Pool *p;
 
-    if( ! (p = AllocMem(sizeof(struct Pool), MEMF_ANY ) ) ) {
+    if(!(p = AllocMem(sizeof(struct Pool), MEMF_ANY))) {
         return NULL;
     }
 
     APB_MemIncrementStats(sizeof(struct Pool));
-    
+
     p->p_MemPool = NULL;
 
     return p;
 }
 
-VOID APB_DestroyPool(MemoryPool pool)
+VOID APB_DestroyPool(
+    MemoryPool pool)
 {
-	FreeMem(pool, sizeof(struct Pool));
+    FreeMem(pool, sizeof(struct Pool));
 
     APB_MemDecrementStats(sizeof(struct Pool));
 }
 
-VOID *APB_AllocMem(MemoryPool pool, ULONG size)
+VOID     *APB_AllocMem(
+    MemoryPool pool,
+    ULONG size)
 {
-    VOID *mem;
-	
-	if( mem = AllocMem(size, MEMF_ANY) ) {
-	    APB_MemIncrementStats((LONG)size);
-	}
+    VOID     *mem;
 
-	return mem;
+    if(mem = AllocMem(size, MEMF_ANY)) {
+        APB_MemIncrementStats((LONG) size);
+    }
+
+    return mem;
 }
 
-VOID APB_FreeMem(MemoryPool pool, VOID *memory, ULONG size)
+VOID APB_FreeMem(
+    MemoryPool pool,
+    VOID * memory,
+    ULONG size)
 {
-    APB_MemDecrementStats((LONG)size);
+    APB_MemDecrementStats((LONG) size);
 
-	FreeMem(memory, size);
+    FreeMem(memory, size);
 }
 
 #endif
 
-APTR APB_PointerAdd(APTR ptr, LONG amt)
+APTR APB_PointerAdd(
+    APTR ptr,
+    LONG amt)
 {
-	if( ptr == 0 ) {
-		printf("Access to NULL pointer.\n");
-	}
+    if(ptr == 0) {
+        printf("Access to NULL pointer.\n");
+    }
 
-	return (APTR)(((BYTE*)ptr) + amt);
+    return (APTR) (((BYTE *) ptr) + amt);
 }
-

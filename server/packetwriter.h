@@ -12,16 +12,28 @@
 
 typedef APTR PacketWriter;
 
-PacketWriter APB_CreatePacketWriter(MemoryPool memPool, ObjectPool objPool);
+PacketWriter APB_CreatePacketWriter(
+    MemoryPool memPool,
+    ObjectPool objPool);
 
-VOID APB_DestroyPacketWriter(PacketWriter packetWriter);
+VOID      APB_DestroyPacketWriter(
+    PacketWriter packetWriter);
 
-VOID APB_WriteBuffer(PacketWriter packetWriter, Remote remote);
+VOID      APB_WriteBuffer(
+    PacketWriter packetWriter,
+    Remote remote);
 
-struct Packet *APB_AllocPacket(PacketWriter packetWriter, UWORD length);
+struct Packet *APB_AllocPacket(
+    PacketWriter packetWriter,
+    UWORD length);
 
-struct Packet *APB_AllocPacketWithId(PacketWriter packetWriter, UWORD length, UWORD packId);
+struct Packet *APB_AllocPacketWithId(
+    PacketWriter packetWriter,
+    UWORD length,
+    UWORD packId);
 
-VOID APB_ResendPacket(PacketWriter packetWriter, UWORD packId);
+VOID      APB_ResendPacket(
+    PacketWriter packetWriter,
+    UWORD packId);
 
 #endif // _APB_PACKET_WRITER_H__

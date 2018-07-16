@@ -8,30 +8,34 @@
 
 struct Library *DosBase;
 
-void __regargs _CXBRK(void) {
+void __regargs _CXBRK(
+    void)
+{
     return;
 }
 
-int main(int argc, char **argv)
+int main(
+    int argc,
+    char **argv)
 {
-    Server srv;
+    Server    srv;
 
-	if( DosBase = OpenLibrary("dos.library", 34) ) {
-    
-	    if( srv = APB_CreateServer() ) {
+    if(DosBase = OpenLibrary("dos.library", 34)) {
 
-    	    APB_Run(srv);
+        if(srv = APB_CreateServer()) {
 
-	        APB_DestroyServer(srv);
+            APB_Run(srv);
 
-		    APB_DumpStats();
-	    }
+            APB_DestroyServer(srv);
 
-		CloseLibrary(DosBase);
+            APB_DumpStats();
+        }
 
-	} else {
-		printf("Can't open dos.library >= 34\n");
-	}
+        CloseLibrary(DosBase);
+
+    } else {
+        printf("Can't open dos.library >= 34\n");
+    }
 
     return 0;
 }

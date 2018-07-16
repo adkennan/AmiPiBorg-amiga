@@ -7,12 +7,16 @@
 typedef APTR Server;
 
 
-Server APB_CreateServer(VOID);
+Server    APB_CreateServer(
+    VOID);
 
-VOID APB_DestroyServer(Server srv);
+VOID      APB_DestroyServer(
+    Server srv);
 
-VOID APB_Run(Server srv);
+VOID      APB_Run(
+    Server srv);
 
-VOID APB_DeletePort(struct MsgPort *port);
+VOID      APB_DeletePort(
+    struct MsgPort *port);
 
 #endif // __APB_SERVER_H__

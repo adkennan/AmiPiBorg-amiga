@@ -3,9 +3,11 @@
 
 #include <clib/exec_protos.h>
 
-VOID *APB_AllocMem(APTR memPool, ULONG memSize)
+VOID     *APB_AllocMem(
+    APTR memPool,
+    ULONG memSize)
 {
-    if( memPool == NULL ) {
+    if(memPool == NULL) {
 
         return AllocMem(memSize, MEMF_CLEAR);
 
@@ -15,9 +17,12 @@ VOID *APB_AllocMem(APTR memPool, ULONG memSize)
     }
 }
 
-VOID APB_FreeMem(APTR memPool, VOID *mem, ULONG memSize)
+VOID APB_FreeMem(
+    APTR memPool,
+    VOID * mem,
+    ULONG memSize)
 {
-    if( memPool == NULL ) {
+    if(memPool == NULL) {
 
         FreeMem(mem, memSize);
 

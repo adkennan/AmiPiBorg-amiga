@@ -4,8 +4,7 @@
 
 #include <exec/types.h>
 
-enum StatTypes
-{
+enum StatTypes {
     // Memory
     ST_MEM_ALLOC_COUNT = 1,
     ST_MEM_FREE_COUNT,
@@ -25,7 +24,7 @@ enum StatTypes
     // Buffers
     ST_BUF_ALLOCATED,
     ST_BUF_ALLOC_FAILURES,
-    
+
     // In Buffers
     ST_IB_ALLOCATED,
     ST_IB_ALLOC_FAILURES,
@@ -43,7 +42,7 @@ enum StatTypes
     // Packets
     ST_PAC_SENT,
     ST_PAC_RECEIVED,
-    
+
     // Bytes
     ST_BYTES_SENT,
     ST_BYTES_RECEIVED,
@@ -57,8 +56,11 @@ enum StatTypes
     ST_END
 };
 
-VOID APB_IncrementStat(UWORD statType, LONG value);
+VOID      APB_IncrementStat(
+    UWORD statType,
+    LONG value);
 
-VOID APB_DumpStats(VOID);
+VOID      APB_DumpStats(
+    VOID);
 
 #endif // __APB_STATS_H__

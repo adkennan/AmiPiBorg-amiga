@@ -15,16 +15,16 @@ struct InitDataTable;
 
 
 /**** Library Init ****/
-struct AmiPiBorgLibrary * __saveds __asm InitLib(
+struct AmiPiBorgLibrary *__saveds __asm InitLib(
     register __a6 struct Library *sysBase,
     register __a0 BPTR segList,
     register __d0 struct AmiPiBorgLibrary *amiPiBorgBase);
 
 
 /**** Library Functions ****/
-struct AmiPiBorgLibrary * __saveds __asm _LibOpen(
+struct AmiPiBorgLibrary *__saveds __asm _LibOpen(
     register __a6 struct AmiPiBorgLibrary *amiPiBorgBase);
-    
+
 BPTR __saveds __asm _LibClose(
     register __a6 struct AmiPiBorgLibrary *amiPiBorgBase);
 
@@ -36,15 +36,17 @@ ULONG __saveds __asm _ExtFuncLib(
 
 /**** Utility Functions ****/
 
-VOID __saveds FreeLib(struct AmiPiBorgLibrary *lib);
+VOID __saveds FreeLib(
+    struct AmiPiBorgLibrary *lib);
 
 
 /**** Prevent Execution ****/
 
-LONG __asm LibStart(VOID)
+LONG __asm LibStart(
+    VOID)
 {
     return -1;
-} 
+}
 
 /**** Variables *****/
 
@@ -69,47 +71,52 @@ struct Resident __aligned _LibRomTag = {
     &InitTab
 };
 
-APTR EndResident;
+APTR      EndResident;
 
 
-char __aligned LibName[]   = APB_LibName;
-char __aligned LibId[]     = APB_LibName " " APB_VersionStr; 
+char __aligned LibName[] = APB_LibName;
+char __aligned LibId[] = APB_LibName " " APB_VersionStr;
 
 
 struct InitDataTable {
 
-    UWORD ln_Type_i;        UWORD ln_Type_o;        UWORD ln_Type_c;
-    UBYTE ln_Name_i;        UBYTE ln_Name_o;        ULONG ln_Name_c;
-    UWORD lib_Flags_i;      UWORD lib_Flags_o;      UWORD lib_Flags_c;
-    UWORD lib_Version_i;    UWORD lib_Version_o;    UWORD lib_Version_c;
-    UWORD lib_Revision_i;   UWORD lib_Revision_o;   UWORD lib_Revision_c;
-    UWORD lib_IdString_i;   UBYTE lib_IdString_o;   ULONG lib_IdString_c;
-    ULONG ENDMARK;
-    
+    UWORD     ln_Type_i;
+    UWORD     ln_Type_o;
+    UWORD     ln_Type_c;
+    UBYTE     ln_Name_i;
+    UBYTE     ln_Name_o;
+    ULONG     ln_Name_c;
+    UWORD     lib_Flags_i;
+    UWORD     lib_Flags_o;
+    UWORD     lib_Flags_c;
+    UWORD     lib_Version_i;
+    UWORD     lib_Version_o;
+    UWORD     lib_Version_c;
+    UWORD     lib_Revision_i;
+    UWORD     lib_Revision_o;
+    UWORD     lib_Revision_c;
+    UWORD     lib_IdString_i;
+    UBYTE     lib_IdString_o;
+    ULONG     lib_IdString_c;
+    ULONG     ENDMARK;
+
 } DataTable = {
-    INITBYTE(OFFSET(Node,   ln_Type),               NT_LIBRARY),
-    0x80, OFFSET(Node,      ln_Name),               (ULONG)&LibName[0],
-    INITBYTE(OFFSET(Library, lib_Flags),            LIBF_SUMUSED | LIBF_CHANGED),
-    INITWORD(OFFSET(Library, lib_Version),          APB_LibVersion),
-    INITWORD(OFFSET(Library, lib_Revision),         APB_LibRevision),
-    0x80, OFFSET(Library,   lib_IdString),          (ULONG)&LibId[0],
-    (ULONG)0
-};
+INITBYTE(OFFSET(Node, ln_Type), NT_LIBRARY),
+        0x80, OFFSET(Node, ln_Name), (ULONG) & LibName[0],
+        INITBYTE(OFFSET(Library, lib_Flags), LIBF_SUMUSED | LIBF_CHANGED),
+        INITWORD(OFFSET(Library, lib_Version), APB_LibVersion),
+        INITWORD(OFFSET(Library, lib_Revision), APB_LibRevision), 0x80, OFFSET(Library, lib_IdString), (ULONG) & LibId[0], (ULONG) 0};
 
 struct InitTable {
-    ULONG   LibBaseSize;
-    APTR   *FuncTable;
-    struct  InitDataTable *DataTable;
-    APTR    InitLibTable;
+    ULONG     LibBaseSize;
+    APTR     *FuncTable;
+    struct InitDataTable *DataTable;
+    APTR      InitLibTable;
 } InitTab = {
-    sizeof(struct AmiPiBorgLibrary),
-    (APTR*)&FuncTable[0],
-    (struct InitDataTable *)&DataTable,
-    (APTR)InitLib
-};
+sizeof(struct AmiPiBorgLibrary), (APTR *) & FuncTable[0], (struct InitDataTable *) &DataTable, (APTR) InitLib};
 
 
-APTR FuncTable[] = {
+APTR      FuncTable[] = {
     _LibOpen,
     _LibClose,
     _LibExpunge,
@@ -121,21 +128,21 @@ APTR FuncTable[] = {
     APB_OpenConnection,
     APB_CloseConnection,
     APB_ConnectionState,
-    
+
     APB_AllocRequest,
     APB_FreeRequest,
 
     APB_Read,
     APB_Write,
     APB_Abort,
-    
-    (APTR)-1
+
+    (APTR) - 1
 };
 
 struct Library *SysBase = NULL;
 struct AmiPiBorgLibrary *AmiPiBorgBase = NULL;
 
-struct AmiPiBorgLibrary * __saveds __asm InitLib(
+struct AmiPiBorgLibrary *__saveds __asm InitLib(
     register __a6 struct Library *sysBase,
     register __a0 BPTR segList,
     register __d0 struct AmiPiBorgLibrary *amiPiBorgBase)
@@ -149,7 +156,7 @@ struct AmiPiBorgLibrary * __saveds __asm InitLib(
     return AmiPiBorgBase;
 }
 
-struct AmiPiBorgLibrary * __saveds __asm _LibOpen(
+struct AmiPiBorgLibrary *__saveds __asm _LibOpen(
     register __a6 struct AmiPiBorgLibrary *amiPiBorgBase)
 {
     amiPiBorgBase->l_Lib.lib_OpenCnt++;
@@ -157,15 +164,15 @@ struct AmiPiBorgLibrary * __saveds __asm _LibOpen(
 
     return amiPiBorgBase;
 }
-    
+
 BPTR __saveds __asm _LibClose(
-    register __a6 struct AmiPiBorgLibrary *amiPiBorgBase)
+    register __a6 struct AmiPiBorgLibrary * amiPiBorgBase)
 {
     amiPiBorgBase->l_Lib.lib_OpenCnt--;
-    
-    if( amiPiBorgBase->l_Lib.lib_OpenCnt == 0 ) {
 
-        if( amiPiBorgBase->l_Lib.lib_Flags & LIBF_DELEXP ) {
+    if(amiPiBorgBase->l_Lib.lib_OpenCnt == 0) {
+
+        if(amiPiBorgBase->l_Lib.lib_Flags & LIBF_DELEXP) {
             return _LibExpunge(amiPiBorgBase);
         }
     }
@@ -173,15 +180,15 @@ BPTR __saveds __asm _LibClose(
 }
 
 BPTR __saveds __asm _LibExpunge(
-    register __a6 struct AmiPiBorgLibrary *amiPiBorgBase)
+    register __a6 struct AmiPiBorgLibrary * amiPiBorgBase)
 {
-    BPTR segList;
+    BPTR      segList;
 
-    if( amiPiBorgBase->l_Lib.lib_OpenCnt == 0 ) {
-        
+    if(amiPiBorgBase->l_Lib.lib_OpenCnt == 0) {
+
         segList = amiPiBorgBase->l_SegList;
 
-        Remove((struct Node*)amiPiBorgBase);
+        Remove((struct Node *) amiPiBorgBase);
 
         FreeLib(amiPiBorgBase);
 
@@ -194,15 +201,16 @@ BPTR __saveds __asm _LibExpunge(
 }
 
 ULONG __saveds __asm _ExtFuncLib(
-    register __a6 struct AmiPiBorgLibrary *amiPiBorgBase)
+    register __a6 struct AmiPiBorgLibrary * amiPiBorgBase)
 {
     return NULL;
 }
 
-VOID __saveds FreeLib(struct AmiPiBorgLibrary *lib)
+VOID __saveds FreeLib(
+    struct AmiPiBorgLibrary * lib)
 {
-    ULONG neg, pos, full;
-    UBYTE* negPtr = (UBYTE*)lib;
+    ULONG     neg, pos, full;
+    UBYTE    *negPtr = (UBYTE *) lib;
 
     neg = lib->l_Lib.lib_NegSize;
     pos = lib->l_Lib.lib_PosSize;
@@ -212,5 +220,4 @@ VOID __saveds FreeLib(struct AmiPiBorgLibrary *lib)
     FreeMem(negPtr, full);
 }
 
-VOID *_XCEXIT = NULL;
-
+VOID     *_XCEXIT = NULL;

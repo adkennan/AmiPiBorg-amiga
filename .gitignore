@@ -57,4 +57,5 @@ bin/*
 *.auts
 *.c.info
 *.h.info
+*~
 

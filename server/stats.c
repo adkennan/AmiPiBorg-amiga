@@ -19,13 +19,13 @@ const char *StatNames[] = {
     "Objects - Release Count",
     "Objects - Instance Count",
     "Objects - Currently Allocated",
-    
+
     "Buffers - Allocated",
     "Buffers - Allocation Failures",
 
     "In Buffers - Allocated",
     "In Buffers - Allocation Failures",
-    
+
     "In Packets - Allocated",
     "In Packets - Allocation Failures",
     "In Packets - Split Packets",
@@ -45,28 +45,31 @@ const char *StatNames[] = {
     "Connections - Failed",
     "Connections - Current",
 
-    NULL    
+    NULL
 };
 
 
-LONG _statCounters[ST_END];
+LONG      _statCounters[ST_END];
 
-VOID APB_IncrementStat(UWORD statType, LONG value)
+VOID APB_IncrementStat(
+    UWORD statType,
+    LONG value)
 {
-    if( statType < ST_MEM_ALLOC_COUNT || statType >= ST_END ) {
+    if(statType < ST_MEM_ALLOC_COUNT || statType >= ST_END) {
         return;
     }
 
     _statCounters[statType - 1] += value;
 }
 
-VOID APB_DumpStats(VOID) 
+VOID APB_DumpStats(
+    VOID)
 {
-    UWORD stat = ST_MEM_ALLOC_COUNT;
-    
+    UWORD     stat = ST_MEM_ALLOC_COUNT;
+
     printf("Statistics:\n");
 
-    while( stat < ST_END ) {
+    while(stat < ST_END) {
 
         printf("\t%s:\t\t%ld\n", StatNames[stat - 1], _statCounters[stat - 1]);
 

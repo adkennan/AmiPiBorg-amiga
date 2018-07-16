@@ -11,12 +11,11 @@
 #define MIN_BUFFERS 8
 #define MAX_BUFFERS 16
 
-struct Buffer
-{
-    struct MinNode      b_Node;
-    ObjectPool          b_ObjPool;
-    UWORD               b_Offset;
-    UBYTE               b_Data[BUFFER_SIZE];
+struct Buffer {
+    struct MinNode b_Node;
+    ObjectPool b_ObjPool;
+    UWORD     b_Offset;
+    UBYTE     b_Data[BUFFER_SIZE];
 };
 
 #define BUF_CURR(buf) (APB_PointerAdd(buf->b_Data, buf->b_Offset))
@@ -25,10 +24,11 @@ struct Buffer
 
 #define BUF_NODE(buf) ((struct Node *)&buf->b_Node)
 
-struct Buffer *APB_AllocateBuffer(ObjectPool objPool);
+struct Buffer *APB_AllocateBuffer(
+    ObjectPool objPool);
 
-VOID APB_ReleaseBuffer(struct Buffer *buf);
+VOID      APB_ReleaseBuffer(
+    struct Buffer *buf);
 
 
 #endif // _APB_BUFFER_H__
-

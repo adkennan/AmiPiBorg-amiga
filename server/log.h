@@ -5,17 +5,36 @@
 
 #include "memory.h"
 
-VOID APB_InitLog(MemoryPool memPool, UWORD level, UWORD logBufSize, BOOL logToStdOut);
+VOID      APB_InitLog(
+    MemoryPool memPool,
+    UWORD level,
+    UWORD logBufSize,
+    BOOL logToStdOut);
 
-VOID APB_DestroyLog(VOID);
+VOID      APB_DestroyLog(
+    VOID);
 
-BOOL APB_ShouldLog(UWORD level);
+BOOL      APB_ShouldLog(
+    UWORD level);
 
-VOID APB_Log(STRPTR file, UWORD line, STRPTR func, UWORD level, STRPTR fmt, ...);
+VOID      APB_Log(
+    STRPTR file,
+    UWORD line,
+    STRPTR func,
+    UWORD level,
+    STRPTR fmt,
+    ...);
 
-VOID APB_LogMem(STRPTR file, UWORD line, STRPTR func, UWORD level, BYTE *data, UWORD length);
+VOID      APB_LogMem(
+    STRPTR file,
+    UWORD line,
+    STRPTR func,
+    UWORD level,
+    BYTE * data,
+    UWORD length);
 
-WORD APB_GetLogLevel(STRPTR levelName);
+WORD      APB_GetLogLevel(
+    STRPTR levelName);
 
 #define LOG_ERROR 0
 #define LOG_INFO 5

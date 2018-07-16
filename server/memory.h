@@ -6,15 +6,23 @@
 
 typedef APTR MemoryPool;
 
-MemoryPool APB_CreatePool(VOID);
+MemoryPool APB_CreatePool(
+    VOID);
 
-VOID APB_DestroyPool(MemoryPool pool);
+VOID      APB_DestroyPool(
+    MemoryPool pool);
 
-VOID *APB_AllocMem(MemoryPool pool, ULONG size);
+VOID     *APB_AllocMem(
+    MemoryPool pool,
+    ULONG size);
 
-VOID APB_FreeMem(MemoryPool pool, VOID *memory, ULONG size);
+VOID      APB_FreeMem(
+    MemoryPool pool,
+    VOID * memory,
+    ULONG size);
 
-APTR APB_PointerAdd(APTR ptr, LONG amt);
+APTR      APB_PointerAdd(
+    APTR ptr,
+    LONG amt);
 
 #endif // __APB_MEMORY_H__
-

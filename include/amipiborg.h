@@ -12,11 +12,11 @@ enum RequestState {
     APB_RS_FAILED,
     APB_RS_NOT_CONNECTED,
     APB_RS_NO_HANDLER,
-	APB_RS_NO_CONNECTION,
+    APB_RS_NO_CONNECTION,
     APB_RS_NO_SERVER,
     APB_RS_ABORTED,
-	APB_RS_BUFFER_TOO_SMALL,
-	APB_RS_TIMEOUT
+    APB_RS_BUFFER_TOO_SMALL,
+    APB_RS_TIMEOUT
 };
 
 enum RequestType {
@@ -27,15 +27,15 @@ enum RequestType {
 };
 
 struct APBRequest {
-	struct Message r_Msg;
-    UWORD r_Type;
-	UWORD r_ConnId;
-    UWORD r_HandlerId;
-	UWORD r_State;
-	UWORD r_Actual;
-	UWORD r_Length;
-	UWORD r_Timeout;
-	APTR r_Data;
+    struct Message r_Msg;
+    UWORD     r_Type;
+    UWORD     r_ConnId;
+    UWORD     r_HandlerId;
+    UWORD     r_State;
+    UWORD     r_Actual;
+    UWORD     r_Length;
+    UWORD     r_Timeout;
+    APTR      r_Data;
 };
 
 #endif // __AMIPIBORG_H__

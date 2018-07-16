@@ -11,29 +11,42 @@
 
 typedef APTR Connection;
 
-enum ConnectionState 
-{
+enum ConnectionState {
     CS_CONNECTING = 1,
     CS_CONNECTED,
     CS_DISCONNECTING,
     CS_DISCONNECTED,
-	CS_NO_HANDLER
+    CS_NO_HANDLER
 };
 
-Connection APB_CreateConnection(struct List *cnns, ObjectPool objectPool, UWORD connId, PacketWriter packetWriter);
+Connection APB_CreateConnection(
+    struct List *cnns,
+    ObjectPool objectPool,
+    UWORD connId,
+    PacketWriter packetWriter);
 
-VOID APB_DestroyConnection(Connection cnn);
+VOID      APB_DestroyConnection(
+    Connection cnn);
 
-Connection APB_FindConnection(struct List *cnns, UWORD id);
+Connection APB_FindConnection(
+    struct List *cnns,
+    UWORD id);
 
-VOID APB_CheckRequestTimeouts(struct List *cnns);
+VOID      APB_CheckRequestTimeouts(
+    struct List *cnns);
 
-VOID APB_HandleConnectionPacket(Connection cnn, struct InPacket *ip);
+VOID      APB_HandleConnectionPacket(
+    Connection cnn,
+    struct InPacket *ip);
 
-VOID APB_HandleClientRequest(Connection cnn, struct APBRequest *req);
+VOID      APB_HandleClientRequest(
+    Connection cnn,
+    struct APBRequest *req);
 
-UWORD APB_GetConnectionState(Connection cnn);
+UWORD     APB_GetConnectionState(
+    Connection cnn);
 
-UWORD APB_GetId(Connection cnn);
+UWORD     APB_GetId(
+    Connection cnn);
 
 #endif // __APB_CONNECTION_H__
