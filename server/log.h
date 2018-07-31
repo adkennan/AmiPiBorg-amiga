@@ -5,11 +5,24 @@
 
 #include "memory.h"
 
+
+#define LOG_ERROR 0
+#define LOG_INFO 5
+#define LOG_DEBUG 10
+#define LOG_TRACE 20
+
+
 VOID      APB_InitLog(
     MemoryPool memPool,
     UWORD level,
     UWORD logBufSize,
     BOOL logToStdOut);
+
+VOID APB_SetLogLevel(
+    UWORD level
+);
+
+UWORD APB_CopyLog(BYTE *data, UWORD length);
 
 VOID      APB_DestroyLog(
     VOID);
@@ -35,11 +48,6 @@ VOID      APB_LogMem(
 
 WORD      APB_GetLogLevel(
     STRPTR levelName);
-
-#define LOG_ERROR 0
-#define LOG_INFO 5
-#define LOG_DEBUG 10
-#define LOG_TRACE 20
 
 #define LOG0(level,msg) if( APB_ShouldLog(level) ) APB_Log(__FILE__, __LINE__, __FUNC__, level, msg)
 #define LOG1(level,msg,a) if( APB_ShouldLog(level) ) APB_Log(__FILE__, __LINE__, __FUNC__, level, msg, a)

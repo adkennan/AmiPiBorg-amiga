@@ -27,8 +27,6 @@ int main(
             APB_Run(srv);
 
             APB_DestroyServer(srv);
-
-            APB_DumpStats();
         }
 
         CloseLibrary(DosBase);

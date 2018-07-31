@@ -28,6 +28,7 @@
 #include <devices/timer.h>
 
 #include <stdio.h>
+#include <string.h>
 
 #define PING_TICKS 5
 #define MAX_MISSED_PINGS 5
@@ -79,25 +80,6 @@ struct Library *RemoteBase;
 #define MODULE "Server"
 
 #define ORDIE(msg) else { LOG0(LOG_ERROR, msg); }
-
-BOOL APB_ConfigureRemote(
-    struct Server *srv)
-{
-    struct RemoteArgs *ra = REM_GetArgTemplate(srv->srv_Remote);
-
-    if(ra) {
-
-        if(srv->srv_Config->cf_RemoteArgs) {
-            if(!APB_ParseRemoteArgs(srv->srv_Config, ra)) {
-                return FALSE;
-            }
-        }
-
-        REM_ConfigureRemote(srv->srv_Remote, ra);
-    }
-
-    return TRUE;
-}
 
 Server APB_CreateServer(
     VOID)
@@ -153,7 +135,7 @@ Server APB_CreateServer(
                                 if(srv->srv_Remote = REM_CreateRemote()) {
 
                                     LOG0(LOG_DEBUG, "Configure Remote");
-                                    if(APB_ConfigureRemote(srv)) {
+                                    if(APB_ConfigureRemote(srv->srv_Config, srv->srv_Remote)) {
 
                                         LOG0(LOG_DEBUG, "Create Timer Port");
 
@@ -580,6 +562,55 @@ VOID APB_SrvReceiveFromRemote(
     }
 }
 
+VOID APB_HandleClientControlMessage(struct Server *srv, struct APBRequest *req)
+{
+    Connection cnn;
+    UWORD ll;
+    BOOL replyMsg = TRUE;
+
+    req->r_State = APB_RS_OK;
+
+    switch( req->r_Type ) {
+        case APB_RT_OPEN:
+            cnn = APB_CreateConnection(CONNECTIONS(srv), srv->srv_ObjPool, srv->srv_NextConnId++, srv->srv_PacketWriter);
+            APB_HandleClientRequest(cnn, req);
+            replyMsg = FALSE;
+            break;           
+
+        case APB_RT_SRV_QUIT:
+            LOG0(LOG_INFO, "Quit Received");
+            srv->srv_State = SS_DISCONNECTED;
+            break;
+
+        case APB_RT_SRV_LOG_LEVEL:
+            ll = *(UWORD *)req->r_Data;
+            LOG1(LOG_INFO, "Set Log Level to %d",  ll);
+            APB_SetLogLevel(ll);
+            break;
+
+        case APB_RT_SRV_LOG:
+            APB_CopyLog(req->r_Data, req->r_Length);
+            break;
+
+        case APB_RT_SRV_CONNS:
+            req->r_State = APB_RS_FAILED;
+            break;
+
+        case APB_RT_SRV_STATS:
+            req->r_State = APB_RS_FAILED;
+            break;
+
+        default:
+            LOG1(LOG_ERROR, "Unknown packet type %d receieved from client.", req->r_Type);
+            req->r_State = APB_RS_FAILED;
+            break;
+    }
+
+    if( replyMsg ) {
+        ReplyMsg((struct Message *)req);
+    }
+}
+
 VOID APB_ReceiveFromClient(
     struct Server *srv)
 {
@@ -588,23 +619,24 @@ VOID APB_ReceiveFromClient(
 
     while(req = (struct APBRequest *) GetMsg(srv->srv_ClientPort)) {
 
-        if(req->r_Type == APB_RT_OPEN) {
+        if( req->r_ConnId == DEFAULT_CONNECTION ) {
+            APB_HandleClientControlMessage(srv, req);
 
-            cnn = APB_CreateConnection(CONNECTIONS(srv), srv->srv_ObjPool, srv->srv_NextConnId++, srv->srv_PacketWriter);
         } else {
 
             cnn = APB_FindConnection(CONNECTIONS(srv), req->r_ConnId);
-        }
 
-        if(cnn == NULL) {
+            if(cnn == NULL) {
 
-            LOG1(LOG_DEBUG, "Received message from invalid connection %d", req->r_ConnId);
+                LOG1(LOG_ERROR, "Received message from invalid connection %d", req->r_ConnId);
 
-            req->r_State = APB_RS_NO_CONNECTION;
-            ReplyMsg((struct Message *) req);
-        } else {
+                req->r_State = APB_RS_NO_CONNECTION;
+                ReplyMsg((struct Message *) req);
 
-            APB_HandleClientRequest(cnn, req);
+            } else {
+
+                APB_HandleClientRequest(cnn, req);
+            }
         }
     }
 }
@@ -617,6 +649,7 @@ VOID APB_HandleTimer(
     switch (srv->srv_State) {
 
     case SS_WAIT_FOR_CONNECT:
+        LOG0(LOG_ERROR, "Failed to connect.");
         srv->srv_State = SS_CONNECT_FAILED;
         break;
 
@@ -626,6 +659,7 @@ VOID APB_HandleTimer(
             srv->srv_MissedPingCount++;
 
             if(srv->srv_MissedPingCount > MAX_MISSED_PINGS) {
+                LOG0(LOG_ERROR, "Remote connection timeout.");
                 srv->srv_State = SS_CONNECTION_LOST;
             }
         } else if(srv->srv_PingTimeoutTicks > 1) {
@@ -820,7 +854,6 @@ VOID APB_Run(
                 srv->srv_State = SS_CONNECTING;
             }
             break;
-
 
         case SS_CONNECTED:
             APB_WaitForMessage(srv);

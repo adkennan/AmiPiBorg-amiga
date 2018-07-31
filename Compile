@@ -56,6 +56,11 @@ CD /
 
 ECHO "Clients"
 
+ECHO "  ApbControl"
+CD clients/ApbControl
+SMAKE <CLEAN>
+CD //
+
 ECHO "  ApbDate"
 CD clients/ApbDate
 SMAKE <CLEAN>

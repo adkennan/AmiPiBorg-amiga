@@ -2,6 +2,8 @@
 #ifndef __APB_REMOTE_PROTOS_H__
 #define __APB_REMOTE_PROTOS_H__
 
+#include <exec/types.h>
+
 struct RemoteArgs {
     STRPTR    ra_Template;
     UWORD     ra_ArgCount;
@@ -17,7 +19,7 @@ VOID __saveds __asm REM_DestroyRemote(
 struct RemoteArgs *__saveds __asm REM_GetArgTemplate(
     register __a0 APTR remote);
 
-VOID __saveds __asm REM_ConfigureRemote(
+BOOL __saveds __asm REM_ConfigureRemote(
     register __a0 APTR remote,
     register __a1 struct RemoteArgs *ra);
 

@@ -13,6 +13,24 @@
 #include <clib/exec_protos.h>
 #include <clib/alib_protos.h>
 
+#include <string.h>
+
+#define ARG_DEVICE 0
+#define ARG_UNIT 1
+#define ARG_BAUD 2
+#define ARG_DATABITS 3
+#define ARG_PARITY 4
+#define ARG_STOPBITS 5
+#define ARG_COUNT 6
+
+#define DEF_UNIT 0
+#define DEF_BAUD 19200
+#define DEF_DATABITS 8
+#define DEF_PARITY FALSE
+#define DEF_STOPBITS 1
+
+#define ARG_TEMPLATE "DEVICE/K,UNIT/K/N,BAUD/K/N,DATABITS/K/N,PARITY/S,STOPBITS/K/N"
+
 struct Remote
 {
     struct MsgPort     *r_ReadPort;
@@ -24,6 +42,12 @@ struct Remote
 	UWORD			    r_BytesRead;
     BOOL                r_ReadReady;
     BOOL                r_WriteReady;    
+    STRPTR              r_Device;
+    UWORD               r_Unit;
+    UWORD               r_DataBits;
+    UWORD               r_StopBits;    
+    LONG                r_Baud;
+    BOOL                r_Parity;
 };
 
 #include "lib.c"
@@ -71,7 +95,8 @@ VOID ContinueRead(struct Remote *r)
     r->r_BytesRead += size;
 }
 
-APTR __saveds __asm REM_CreateRemote(VOID)
+APTR __saveds __asm REM_CreateRemote(
+    VOID)
 {
 	struct Remote *r;
 
@@ -86,6 +111,13 @@ APTR __saveds __asm REM_CreateRemote(VOID)
 		r->r_BytesRead = 0;
     	r->r_ReadReady = FALSE;
     	r->r_WriteReady = FALSE;  
+
+        r->r_Device = NULL;
+        r->r_Unit = DEF_UNIT;
+        r->r_Baud = DEF_BAUD;
+        r->r_DataBits = DEF_DATABITS;  
+        r->r_Parity = DEF_PARITY;
+        r->r_StopBits = DEF_STOPBITS;
 	}
 
 	return r;
@@ -95,18 +127,14 @@ VOID __saveds __asm REM_DestroyRemote(
 	register __a0 APTR remote
 )
 {
-	FreeMem(remote, sizeof(struct Remote));
+    struct Remote *r = (struct Remote *)remote;
+	
+    if( r->r_Device ) {
+        FreeMem(r->r_Device, strlen(r->r_Device) + 1);
+    }
+
+    FreeMem(remote, sizeof(struct Remote));
 }
-
-#define ARG_DEVICE 0
-#define ARG_UNIT 1
-#define ARG_BAUD 2
-#define ARG_DATABITS 3
-#define ARG_PARITYBITS 4
-#define ARG_STOPBITS 5
-#define ARG_COUNT 6
-
-#define ARG_TEMPLATE "DEVICE/K,UNIT/N,BAUD/N,DATABITS/N,PARITY/K,STOPBITS/N"
 
 struct RemoteArgs * __saveds __asm REM_GetArgTemplate(
 	register __a0 APTR remote
@@ -116,18 +144,18 @@ struct RemoteArgs * __saveds __asm REM_GetArgTemplate(
 	struct RemoteArgs *ra;
 	LONG *argVals;
 
-	if( ! (ra = AllocMem(sizeof(struct Remote) + (sizeof(LONG) * ARG_COUNT), MEMF_ANY ) ) ) {
+	if( ! (ra = AllocMem(sizeof(struct RemoteArgs) + (sizeof(LONG) * ARG_COUNT), MEMF_ANY ) ) ) {
 		return NULL;
 	}
 
 	argVals = (LONG *)(ra + 1);
 
-	argVals[ARG_DEVICE] = (LONG)"serial.device";
-	argVals[ARG_UNIT] = 0;
-	argVals[ARG_BAUD] = 19200;
-	argVals[ARG_DATABITS] = 8;
-	argVals[ARG_PARITYBITS] = (LONG)"N";
-	argVals[ARG_STOPBITS] = 1;
+	argVals[ARG_DEVICE] = (LONG)SERIALNAME;
+	argVals[ARG_UNIT] = DEF_UNIT;
+	argVals[ARG_BAUD] = DEF_BAUD;
+	argVals[ARG_DATABITS] = DEF_DATABITS;
+	argVals[ARG_PARITY] = (LONG)DEF_PARITY;
+	argVals[ARG_STOPBITS] = DEF_STOPBITS;
 	
 	ra->ra_Template = ARG_TEMPLATE;
 	ra->ra_ArgCount = ARG_COUNT;
@@ -136,14 +164,47 @@ struct RemoteArgs * __saveds __asm REM_GetArgTemplate(
 	return ra;
 }
 
-VOID __saveds __asm REM_ConfigureRemote(
+BOOL __saveds __asm REM_ConfigureRemote(
 	register __a0 APTR remote,
 	register __a1 struct RemoteArgs *ra
 )
 {
- //   struct Remote *r = (struct Remote *)remote;
+    struct Remote *r = (struct Remote *)remote;
+    BOOL result = TRUE;
 
+    if( ra->ra_ArgValues[ARG_DEVICE] ) {
+        if( ! ( r->r_Device = AllocMem(strlen((STRPTR)ra->ra_ArgValues[ARG_DEVICE]) + 1, MEMF_ANY)) ) {
+            result = FALSE;
+            goto done;
+        }
+
+        strcpy(r->r_Device, (STRPTR)ra->ra_ArgValues[ARG_DEVICE]);
+    }
+
+    if( ra->ra_ArgValues[ARG_UNIT] ) {
+        r->r_Unit = (UWORD)*(LONG *)ra->ra_ArgValues[ARG_UNIT];
+    }
+
+    if( ra->ra_ArgValues[ARG_BAUD] ) {
+        r->r_Baud = (UWORD)*(LONG *)ra->ra_ArgValues[ARG_BAUD];
+    }
+
+    if( ra->ra_ArgValues[ARG_DATABITS] ) {
+        r->r_DataBits = (UWORD)*(LONG *)ra->ra_ArgValues[ARG_DATABITS];    
+    }
+
+    if( ra->ra_ArgValues[ARG_PARITY] ) {
+        r->r_Parity = (BOOL)ra->ra_ArgValues[ARG_PARITY];
+    }
+    
+    if( ra->ra_ArgValues[ARG_STOPBITS] ) {
+        r->r_StopBits = (UWORD)*(LONG *)ra->ra_ArgValues[ARG_STOPBITS];
+    }
+
+done:
 	FreeMem(ra, sizeof(struct RemoteArgs) + (sizeof(LONG) * ARG_COUNT));
+
+    return result;
 }
 
 
@@ -165,12 +226,20 @@ BOOL __saveds __asm REM_OpenRemote(
 
                 if( writeReq = (struct IOExtSer *)CreateExtIO(writePort, sizeof(struct IOExtSer)) ) {
 
-                    if( OpenDevice(SERIALNAME, 0, (struct IORequest *)writeReq, 0) == 0 ) {
+                    if( OpenDevice(r->r_Device ? r->r_Device : (STRPTR)SERIALNAME, r->r_Unit, (struct IORequest *)writeReq, 0) == 0 ) {
                         
                         writeReq->IOSer.io_Command = SDCMD_SETPARAMS;
-                        writeReq->io_SerFlags &= ~SERF_PARTY_ON;
+                        if( r->r_Parity ) {
+                            writeReq->io_SerFlags |= SERF_PARTY_ON;
+                        } else {
+                           writeReq->io_SerFlags &= ~SERF_PARTY_ON;
+                        }
                         writeReq->io_SerFlags |= SERF_XDISABLED;
-                        writeReq->io_Baud = 19200;
+                        writeReq->io_Baud = r->r_Baud;
+                        writeReq->io_ReadLen = r->r_DataBits;
+                        writeReq->io_WriteLen = r->r_DataBits;
+                        writeReq->io_StopBits = r->r_StopBits;
+
                         DoIO((struct IORequest *)writeReq);
 
                         writeReq->IOSer.io_Command = CMD_FLUSH;

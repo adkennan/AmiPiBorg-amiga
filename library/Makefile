@@ -23,9 +23,9 @@ C_OPTS=		CPU=$(CPU) NOICONS STREQ STRMER NOSTKCHK NOSTANDARDIO INCLUDEDIRECTORY=
 
 LINKER=		SC:c/slink
 
-C_SOURCES=	lib.c memory.c connection.c request.c io.c
+C_SOURCES=	lib.c memory.c connection.c request.c io.c control.c
 
-OBJECTS=	lib.o memory.o connection.o request.o io.o
+OBJECTS=	lib.o memory.o connection.o request.o io.o control.o
 
 LIBS=		LIB:sc.lib LIB:amiga.lib
 

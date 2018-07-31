@@ -136,6 +136,14 @@ APTR      FuncTable[] = {
     APB_Write,
     APB_Abort,
 
+    APB_SrvQuit,
+    APB_SrvSetLogLevel,
+    APB_SrvGetLog,
+    APB_SrvGetConnections,
+    APB_SrvGetStats,
+
+    APB_Log,
+
     (APTR) - 1
 };
 

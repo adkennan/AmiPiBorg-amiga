@@ -4,6 +4,7 @@
 #include "memory.h"
 #include "stats.h"
 #include "log.h"
+#include "event.h"
 
 #include "amipiborg.h"
 
@@ -19,7 +20,9 @@ struct Connection {
     struct MinNode cnn_Node;
     ObjectPool cnn_ObjectPool;
     PacketWriter cnn_PacketWriter;
+    EventBroker cnn_EventBroker;
     struct MinList cnn_PacketQueue;
+    struct MinList cnn_EventQueue;
     struct MinList cnn_ReqQueue;
     UWORD     cnn_Id;
     UWORD     cnn_HandlerId;
@@ -34,6 +37,7 @@ struct RequestInt {
 
 #define REQ_LIST(c) ((struct List *)&c->cnn_ReqQueue)
 #define PAC_LIST(c) ((struct List *)&c->cnn_PacketQueue)
+#define EVT_LIST(c) ((struct List *)&c->cnn_EventQueue)
 
 VOID APB_CnnConnect(
     struct Connection *c)
@@ -386,7 +390,14 @@ VOID APB_HandleClientRequest(
         }
         break;
 
+    case APB_RT_LOG:
+        LOG2(0, "Conn %d: %s", c->cnn_Id, req->r_Data);
+        reply = TRUE;
+        break;
+
     default:
+        LOG1(LOG_ERROR, "Unknown request type %d\n", req->r_Type);
+        reply = TRUE;
         break;
     }
 

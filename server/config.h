@@ -2,7 +2,9 @@
 #define __APB_CONFIG_H__
 
 #include "memory.h"
+#include "remote.h"
 #include "remote_protos.h"
+#include "remote_pragmas.h"
 
 #include <exec/types.h>
 
@@ -21,8 +23,8 @@ struct Config *APB_GetConfig(
 VOID      APB_FreeConfig(
     struct Config *cfg);
 
-BOOL      APB_ParseRemoteArgs(
+BOOL      APB_ConfigureRemote(
     struct Config *cfg,
-    struct RemoteArgs *ra);
+    Remote rem);
 
 #endif

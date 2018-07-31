@@ -3,6 +3,7 @@
 
 #include "log.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include <dos/dos.h>
@@ -15,7 +16,7 @@
 #define ARG_REMARGS 3
 #define ARGS_LEN 4
 
-#define TEMPLATE "L=LogLevel/K,Q=Quiet/S,R=Remote/K,RemoteArgs/F"
+#define TEMPLATE "L=LOGLEVEL/K,Q=QUIET/S,R=REMOTE/K,REMOTEARGS/F"
 
 VOID APB_ShowError(
     STRPTR msg)
@@ -69,10 +70,7 @@ struct Config *APB_GetConfig(
     }
 
     if(argArr[ARG_REMARGS]) {
-        len2 = strlen((STRPTR) argArr[ARG_REMARGS]) + 1;
-        if(len2 % 2) {
-            len2++;
-        }
+        len2 = strlen((STRPTR) argArr[ARG_REMARGS]) + 2;
     }
 
     if(!(cfg = (struct Config *) APB_AllocMem(mp, sizeof(struct Config) + len1 + len2))) {
@@ -90,6 +88,10 @@ struct Config *APB_GetConfig(
     if(len2) {
         cfg->cf_RemoteArgs = (STRPTR) APB_PointerAdd(cfg, sizeof(struct Config) + len1);
         strcpy(cfg->cf_RemoteArgs, (STRPTR) argArr[ARG_REMARGS]);
+        cfg->cf_RemoteArgs[len2 - 2] = '\n';
+        cfg->cf_RemoteArgs[len2 - 1] = '\0';
+    } else {
+        cfg->cf_RemoteArgs = NULL; 
     }
 
   done:
@@ -103,35 +105,60 @@ struct Config *APB_GetConfig(
 VOID APB_FreeConfig(
     struct Config * cfg)
 {
-    APB_FreeMem(cfg->cf_MemPool, cfg, cfg->cf_Size);
+    APB_FreeMem(cfg->cf_MemPool, cfg, sizeof(struct Config) + cfg->cf_Size);
 }
 
-BOOL APB_ParseRemoteArgs(
+BOOL APB_ConfigureRemote(
     struct Config *cfg,
-    struct RemoteArgs *ra)
+    Remote rem)
 {
     struct RDArgs *rda;
-    BOOL      result = FALSE;
+    BOOL      result = TRUE;
+    struct RemoteArgs *ra = REM_GetArgTemplate(rem);
 
-    if(rda = (struct RDArgs *) AllocDosObject(DOS_RDARGS, NULL)) {
+    if(ra) {
 
-        rda->RDA_Source.CS_Buffer = cfg->cf_RemoteArgs;
-        rda->RDA_Source.CS_Length = strlen(cfg->cf_RemoteArgs);
+        if(cfg->cf_RemoteArgs && strlen(cfg->cf_RemoteArgs) > 0) {
 
-        if(ReadArgs(ra->ra_Template, ra->ra_ArgValues, rda)) {
+            LOG1(LOG_DEBUG,"Confguring remote with args \"%s\"", cfg->cf_RemoteArgs);
 
-            result = TRUE;
+            if(rda = (struct RDArgs *) AllocDosObject(DOS_RDARGS, NULL)) {
 
-            FreeArgs(rda);
-        } else {
-            PutStr("Error parsing args for ");
-            PutStr(cfg->cf_RemoteName);
-            PutStr(": ");
-            PutStr(ra->ra_Template);
-            PutStr("\n");
+                rda->RDA_Source.CS_Buffer = cfg->cf_RemoteArgs;
+                rda->RDA_Source.CS_Length = strlen(cfg->cf_RemoteArgs);
+
+                if(ReadArgs(ra->ra_Template, ra->ra_ArgValues, rda)) {
+
+                    if( ! REM_ConfigureRemote(rem, ra) ) {
+
+                        LOG0(LOG_ERROR, "Failed to configure remote.");
+                        result = FALSE;
+                    }
+
+                    FreeArgs(rda);
+
+                } else {
+
+                    LOG0(LOG_ERROR, "Failed to parse args for remote");
+
+                    result = FALSE;
+
+                    PutStr("Error parsing args for ");
+                    PutStr(cfg->cf_RemoteName);
+                    PutStr(": ");
+                    PutStr(ra->ra_Template);
+                    PutStr("\n");
+                }
+
+                FreeDosObject(DOS_RDARGS, rda);
+
+            } else {
+
+                LOG0(LOG_ERROR, "Failed to allocate RDArgs structure.");
+
+                result= FALSE;
+            }
         }
-
-        FreeDosObject(DOS_RDARGS, rda);
     }
 
     return result;

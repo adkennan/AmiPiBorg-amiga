@@ -23,7 +23,15 @@ enum RequestType {
     APB_RT_OPEN = 1,
     APB_RT_CLOSE,
     APB_RT_READ,
-    APB_RT_WRITE
+    APB_RT_WRITE,
+
+	APB_RT_LOG = 50,
+
+	APB_RT_SRV_QUIT = 100,
+	APB_RT_SRV_STATS = 101,
+	APB_RT_SRV_LOG_LEVEL = 102,
+	APB_RT_SRV_LOG = 103,
+	APB_RT_SRV_CONNS = 104
 };
 
 struct APBRequest {
@@ -35,6 +43,7 @@ struct APBRequest {
     UWORD     r_Actual;
     UWORD     r_Length;
     UWORD     r_Timeout;
+    UWORD     r_DataType;
     APTR      r_Data;
 };
 
