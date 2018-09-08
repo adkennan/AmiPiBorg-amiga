@@ -1,0 +1,8 @@
+APB0:
+Handler		=	Stuff:Andrew/AmiPiBorg/bin/ApbFs
+GlobVec		=	-1
+Priority	=	10
+Unit		=	0
+BufMemType	=	1
+StackSize	=	8192
+

@@ -47,4 +47,6 @@ struct APBRequest {
     APTR      r_Data;
 };
 
+extern struct Library *AmiPiBorgBase;
+
 #endif // __AMIPIBORG_H__

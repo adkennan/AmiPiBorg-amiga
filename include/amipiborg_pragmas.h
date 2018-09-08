@@ -8,3 +8,9 @@
 #pragma libcall AmiPiBorgBase APB_Read 48 801
 #pragma libcall AmiPiBorgBase APB_Write 4e 801
 #pragma libcall AmiPiBorgBase APB_Abort 54 801
+#pragma libcall AmiPiBorgBase APB_SrvQuit 5a 0
+#pragma libcall AmiPiBorgBase APB_SrvSetLogLevel 60 001
+#pragma libcall AmiPiBorgBase APB_SrvGetLog 66 0802
+#pragma libcall AmiPiBorgBase APB_SrvGetConnections 6c 0802
+#pragma libcall AmiPiBorgBase APB_SrvGetStats 72 0802
+#pragma libcall AmiPiBorgBase APB_Log 78 90803
