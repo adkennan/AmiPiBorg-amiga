@@ -5,7 +5,7 @@
 
 
 VOID __asm __saveds APB_Read(
-    register __a0 struct APBRequest *request)
+    register __a0 struct APBRequest * request)
 {
     struct RequestInt *r = (struct RequestInt *) request;
 

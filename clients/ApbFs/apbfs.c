@@ -8,15 +8,17 @@ struct Library *DosBase;
 
 struct Library *AmiPiBorgBase;
 
-int main(int argc, char** argv)
+int main(
+    int argc,
+    char **argv)
 {
     struct ApbFs *device;
 
-    if( DosBase = OpenLibrary(DOSNAME, 37) ) {
+    if(DosBase = OpenLibrary(DOSNAME, 37)) {
 
-        if( AmiPiBorgBase = OpenLibrary(APB_LibName, 1) ) {
+        if(AmiPiBorgBase = OpenLibrary(APB_LibName, 1)) {
 
-            if( device = FS_CreateDevice() ) {
+            if(device = FS_CreateDevice()) {
 
                 FS_Run(device);
 
@@ -27,5 +29,5 @@ int main(int argc, char** argv)
         }
 
         CloseLibrary(DosBase);
-    }    
+    }
 }

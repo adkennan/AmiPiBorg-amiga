@@ -76,4 +76,8 @@ CD clients/ApbPing
 SMAKE <CLEAN>
 CD //
 
+ECHO "  ApbFs"
+CD clients/ApbFs
+SMAKE <CLEAN>
+CD //
 

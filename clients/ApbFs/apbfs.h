@@ -51,7 +51,7 @@ struct FsRequest
 	struct MinNode r_Node;
 	struct Volume *r_Volume;
 	struct DosPacket *r_Pkt;
-	struct FsRequest *r_Self;
+    struct FsRequest *r_Self;
 	ULONG r_Arg1;
 	ULONG r_Arg2;
 	ULONG r_Arg3;
@@ -67,6 +67,14 @@ struct FsResponse
 	ULONG r_Res1;
 	ULONG r_Res2;
 	UWORD r_Length;
+};
+
+#define NEW_VOLUME_KEY 0xFFFFFFFF
+
+struct FsNewVolume
+{
+    ULONG nv_Key;
+    UWORD nv_VolId;
 };
 
 struct FsRequest *FS_AllocRequest(struct Volume *vol, struct DosPacket *pkt, UWORD type, UWORD length);

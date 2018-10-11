@@ -562,52 +562,54 @@ VOID APB_SrvReceiveFromRemote(
     }
 }
 
-VOID APB_HandleClientControlMessage(struct Server *srv, struct APBRequest *req)
+VOID APB_HandleClientControlMessage(
+    struct Server *srv,
+    struct APBRequest *req)
 {
     Connection cnn;
-    UWORD ll;
-    BOOL replyMsg = TRUE;
+    UWORD     ll;
+    BOOL      replyMsg = TRUE;
 
     req->r_State = APB_RS_OK;
 
-    switch( req->r_Type ) {
-        case APB_RT_OPEN:
-            cnn = APB_CreateConnection(CONNECTIONS(srv), srv->srv_ObjPool, srv->srv_NextConnId++, srv->srv_PacketWriter);
-            APB_HandleClientRequest(cnn, req);
-            replyMsg = FALSE;
-            break;           
+    switch (req->r_Type) {
+    case APB_RT_OPEN:
+        cnn = APB_CreateConnection(CONNECTIONS(srv), srv->srv_ObjPool, srv->srv_NextConnId++, srv->srv_PacketWriter);
+        APB_HandleClientRequest(cnn, req);
+        replyMsg = FALSE;
+        break;
 
-        case APB_RT_SRV_QUIT:
-            LOG0(LOG_INFO, "Quit Received");
-            srv->srv_State = SS_DISCONNECTED;
-            break;
+    case APB_RT_SRV_QUIT:
+        LOG0(LOG_INFO, "Quit Received");
+        srv->srv_State = SS_DISCONNECTED;
+        break;
 
-        case APB_RT_SRV_LOG_LEVEL:
-            ll = *(UWORD *)req->r_Data;
-            LOG1(LOG_INFO, "Set Log Level to %d",  ll);
-            APB_SetLogLevel(ll);
-            break;
+    case APB_RT_SRV_LOG_LEVEL:
+        ll = *(UWORD *) req->r_Data;
+        LOG1(LOG_INFO, "Set Log Level to %d", ll);
+        APB_SetLogLevel(ll);
+        break;
 
-        case APB_RT_SRV_LOG:
-            APB_CopyLog(req->r_Data, req->r_Length);
-            break;
+    case APB_RT_SRV_LOG:
+        APB_CopyLog(req->r_Data, req->r_Length);
+        break;
 
-        case APB_RT_SRV_CONNS:
-            req->r_State = APB_RS_FAILED;
-            break;
+    case APB_RT_SRV_CONNS:
+        req->r_State = APB_RS_FAILED;
+        break;
 
-        case APB_RT_SRV_STATS:
-            req->r_State = APB_RS_FAILED;
-            break;
+    case APB_RT_SRV_STATS:
+        req->r_State = APB_RS_FAILED;
+        break;
 
-        default:
-            LOG1(LOG_ERROR, "Unknown packet type %d receieved from client.", req->r_Type);
-            req->r_State = APB_RS_FAILED;
-            break;
+    default:
+        LOG1(LOG_ERROR, "Unknown packet type %d receieved from client.", req->r_Type);
+        req->r_State = APB_RS_FAILED;
+        break;
     }
 
-    if( replyMsg ) {
-        ReplyMsg((struct Message *)req);
+    if(replyMsg) {
+        ReplyMsg((struct Message *) req);
     }
 }
 
@@ -619,7 +621,7 @@ VOID APB_ReceiveFromClient(
 
     while(req = (struct APBRequest *) GetMsg(srv->srv_ClientPort)) {
 
-        if( req->r_ConnId == DEFAULT_CONNECTION ) {
+        if(req->r_ConnId == DEFAULT_CONNECTION) {
             APB_HandleClientControlMessage(srv, req);
 
         } else {

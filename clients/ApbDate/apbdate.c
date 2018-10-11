@@ -23,87 +23,86 @@
 struct Library *AmiPiBorgBase;
 struct Library *UtilityBase;
 
-int main(int argc, char **argv)
+int main(
+    int argc,
+    char **argv)
 {
-    APTR conn;
+    APTR      conn;
     struct APBRequest *reader;
     struct MsgPort *port;
-	struct Message *msg;
-    ULONG sig;
-	ULONG time = 0;
-	struct timerequest *timerIO;
-	struct ClockData cd;
+    struct Message *msg;
+    ULONG     sig;
+    ULONG     time = 0;
+    struct timerequest *timerIO;
+    struct ClockData cd;
 
-	if( port = CreatePort(NULL, 0) ) {
+    if(port = CreatePort(NULL, 0)) {
 
-		if( AmiPiBorgBase = OpenLibrary(APB_LibName, 1) ) {
+        if(AmiPiBorgBase = OpenLibrary(APB_LibName, 1)) {
 
-       	    if( conn = APB_AllocConnection(port, HANDLER_ID, NULL) ) {
+            if(conn = APB_AllocConnection(port, HANDLER_ID, NULL)) {
 
-               	if( reader = APB_AllocRequest(conn) ) {
+                if(reader = APB_AllocRequest(conn)) {
 
-                   	reader->r_Data = &time;
-	                reader->r_Length = sizeof(ULONG);
-					reader->r_Timeout = 5;
+                    reader->r_Data = &time;
+                    reader->r_Length = sizeof(ULONG);
+                    reader->r_Timeout = 5;
 
-	         	    if( APB_OpenConnection(conn) ) {
+                    if(APB_OpenConnection(conn)) {
 
-						APB_Read(reader);
-		
-	                    sig = Wait((1 << port->mp_SigBit) |  SIGBREAKF_CTRL_C );
+                        APB_Read(reader);
 
-       	                while( msg = GetMsg(port) ) {
-             	        	if( msg != (struct Message *)reader ) {
-                        		ReplyMsg(msg);
-                           	}
-	                    }
+                        sig = Wait((1 << port->mp_SigBit) | SIGBREAKF_CTRL_C);
 
-						APB_CloseConnection(conn);
-					} else {
+                        while(msg = GetMsg(port)) {
+                            if(msg != (struct Message *) reader) {
+                                ReplyMsg(msg);
+                            }
+                        }
 
-    	                printf("Failed to connect: %d\n", APB_ConnectionState(conn));
-					}
+                        APB_CloseConnection(conn);
+                    } else {
 
-					APB_FreeRequest(reader);
-				}
-				
-				APB_FreeConnection(conn);
-			}
-	
-	       	CloseLibrary(AmiPiBorgBase);
-   	    }
+                        printf("Failed to connect: %d\n", APB_ConnectionState(conn));
+                    }
+
+                    APB_FreeRequest(reader);
+                }
+
+                APB_FreeConnection(conn);
+            }
+
+            CloseLibrary(AmiPiBorgBase);
+        }
 
 
-		if( time == 0 ) {
-			printf("Unabled to get updated date and time.\n");
-		} else if( timerIO = (struct timerequest *)CreateExtIO(port, sizeof(struct timerequest)) ) {
-	
-			if( OpenDevice(TIMERNAME, UNIT_VBLANK, (struct IORequest *)timerIO, 0L) == 0 ) {
+        if(time == 0) {
+            printf("Unabled to get updated date and time.\n");
+        } else if(timerIO = (struct timerequest *) CreateExtIO(port, sizeof(struct timerequest))) {
 
-				timerIO->tr_node.io_Command = TR_SETSYSTIME;
-				timerIO->tr_time.tv_micro = 0;
-				timerIO->tr_time.tv_secs = time;
-					
-				DoIO((struct IORequest *)timerIO);
+            if(OpenDevice(TIMERNAME, UNIT_VBLANK, (struct IORequest *) timerIO, 0L) == 0) {
 
-				CloseDevice((struct IORequest *)timerIO);
-			}
+                timerIO->tr_node.io_Command = TR_SETSYSTIME;
+                timerIO->tr_time.tv_micro = 0;
+                timerIO->tr_time.tv_secs = time;
 
-			DeleteExtIO((struct IORequest *)timerIO);
+                DoIO((struct IORequest *) timerIO);
 
-			if( UtilityBase = OpenLibrary("utility.library", 1) ) {
+                CloseDevice((struct IORequest *) timerIO);
+            }
 
-				Amiga2Date(time, &cd);
+            DeleteExtIO((struct IORequest *) timerIO);
 
-				printf("%02d/%02d/%04d %02d:%02d:%02d\n", 
-					cd.mday, cd.month, cd.year, 
-					cd.hour, cd.min, cd.sec);
+            if(UtilityBase = OpenLibrary("utility.library", 1)) {
 
-				CloseLibrary(UtilityBase);
-			}
-		}
+                Amiga2Date(time, &cd);
 
-        DeletePort(port);        
-	}
+                printf("%02d/%02d/%04d %02d:%02d:%02d\n", cd.mday, cd.month, cd.year, cd.hour, cd.min, cd.sec);
+
+                CloseLibrary(UtilityBase);
+            }
+        }
+
+        DeletePort(port);
+    }
 }
-

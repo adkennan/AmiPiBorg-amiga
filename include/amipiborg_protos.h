@@ -27,10 +27,9 @@ UWORD __asm __saveds APB_ConnectionState(
     register __a0 APTR connection);
 
 VOID __asm __saveds APB_Log(
-	register __a0 APTR connection,
-	register __d0 UWORD level,
-	register __a1 STRPTR msg
-);
+    register __a0 APTR connection,
+    register __d0 UWORD level,
+    register __a1 STRPTR msg);
 
 
 struct APBRequest *__asm __saveds APB_AllocRequest(
@@ -51,22 +50,23 @@ VOID __asm __saveds APB_Abort(
 
 // Control Functions
 
-UWORD __asm __saveds APB_SrvQuit(VOID);
+UWORD __asm __saveds APB_SrvQuit(
+    VOID);
 
 UWORD __asm __saveds APB_SrvSetLogLevel(
-	register __d0 UWORD level);
+    register __d0 UWORD level);
 
 UWORD __asm __saveds APB_SrvGetLog(
-	register __a0 BYTE *data,
-	register __d0 UWORD length);
+    register __a0 BYTE * data,
+    register __d0 UWORD length);
 
 UWORD __asm __saveds APB_SrvGetConnections(
-	register __a0 BYTE *data,
-	register __d0 UWORD length);
+    register __a0 BYTE * data,
+    register __d0 UWORD length);
 
 UWORD __asm __saveds APB_SrvGetStats(
-	register __a0 BYTE *data,	
-	register __d0 UWORD length); 
+    register __a0 BYTE * data,
+    register __d0 UWORD length);
 
 
 

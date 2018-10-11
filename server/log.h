@@ -18,11 +18,12 @@ VOID      APB_InitLog(
     UWORD logBufSize,
     BOOL logToStdOut);
 
-VOID APB_SetLogLevel(
-    UWORD level
-);
+VOID      APB_SetLogLevel(
+    UWORD level);
 
-UWORD APB_CopyLog(BYTE *data, UWORD length);
+UWORD     APB_CopyLog(
+    BYTE * data,
+    UWORD length);
 
 VOID      APB_DestroyLog(
     VOID);

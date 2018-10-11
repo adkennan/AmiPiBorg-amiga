@@ -66,20 +66,20 @@ VOID APB_LogByte(
 {
     Log.l_Buf[Log.l_End] = c;
     Log.l_End++;
-    
+
     if(Log.l_End >= Log.l_BufSize) {
         Log.l_End = 0;
     }
 
-    if(Log.l_End == Log.l_Start) {        
+    if(Log.l_End == Log.l_Start) {
         do {
             Log.l_Start++;
-            if( Log.l_Start == Log.l_BufSize ) {
+            if(Log.l_Start == Log.l_BufSize) {
                 Log.l_Start = 0;
             }
         } while(Log.l_Buf[Log.l_Start]);
         Log.l_Start++;
-        if( Log.l_Start == Log.l_BufSize ) {
+        if(Log.l_Start == Log.l_BufSize) {
             Log.l_Start = 0;
         }
     }
@@ -188,8 +188,8 @@ UWORD APB_LogLevel(
 
 
 VOID APB_SetLogLevel(
-    UWORD level
-) {
+    UWORD level)
+{
     Log.l_Level = level;
 }
 
@@ -210,21 +210,23 @@ WORD APB_GetLogLevel(
     return -1;
 }
 
-UWORD APB_CopyLog(BYTE *data, UWORD length)
+UWORD APB_CopyLog(
+    BYTE * data,
+    UWORD length)
 {
-    UWORD dataLen, s, l;
+    UWORD     dataLen, s, l;
 
-    if( Log.l_Start > Log.l_End ) {
+    if(Log.l_Start > Log.l_End) {
 
         dataLen = Log.l_BufSize - (Log.l_Start - Log.l_End);
-        if( dataLen > length ) {
+        if(dataLen > length) {
             dataLen = length;
         }
         s = Log.l_Start;
         l = Log.l_BufSize - Log.l_Start;
 
         CopyMem(APB_PointerAdd(Log.l_Buf, s), data, l);
-        
+
         s = 0;
         l = Log.l_End;
 
@@ -232,7 +234,7 @@ UWORD APB_CopyLog(BYTE *data, UWORD length)
 
     } else {
         dataLen = Log.l_End - Log.l_Start;
-        if( dataLen > length ) {
+        if(dataLen > length) {
             dataLen = length;
         }
 
@@ -340,7 +342,7 @@ VOID APB_Log(
     va_end(ap);
 
     APB_LogByte('\0');
-    
+
     if(Log.l_LogToStdOut) {
 
         PutStr((STRPTR) (Log.l_Buf + s));

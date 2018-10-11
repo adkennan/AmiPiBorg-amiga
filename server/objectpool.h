@@ -13,8 +13,8 @@ enum ObjectTypes {
     OT_CONNECTION = 400,
     OT_OUT_PACKET = 500,
     OT_OUT_BUFFER = 600,
-	OT_EVENT_SUB = 700,
-	OT_EVENT = 800,
+    OT_EVENT_SUB = 700,
+    OT_EVENT = 800,
     OT_EVENT_NODE = 900
 };
 

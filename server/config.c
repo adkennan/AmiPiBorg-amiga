@@ -91,7 +91,7 @@ struct Config *APB_GetConfig(
         cfg->cf_RemoteArgs[len2 - 2] = '\n';
         cfg->cf_RemoteArgs[len2 - 1] = '\0';
     } else {
-        cfg->cf_RemoteArgs = NULL; 
+        cfg->cf_RemoteArgs = NULL;
     }
 
   done:
@@ -120,7 +120,7 @@ BOOL APB_ConfigureRemote(
 
         if(cfg->cf_RemoteArgs && strlen(cfg->cf_RemoteArgs) > 0) {
 
-            LOG1(LOG_DEBUG,"Confguring remote with args \"%s\"", cfg->cf_RemoteArgs);
+            LOG1(LOG_DEBUG, "Confguring remote with args \"%s\"", cfg->cf_RemoteArgs);
 
             if(rda = (struct RDArgs *) AllocDosObject(DOS_RDARGS, NULL)) {
 
@@ -129,7 +129,7 @@ BOOL APB_ConfigureRemote(
 
                 if(ReadArgs(ra->ra_Template, ra->ra_ArgValues, rda)) {
 
-                    if( ! REM_ConfigureRemote(rem, ra) ) {
+                    if(!REM_ConfigureRemote(rem, ra)) {
 
                         LOG0(LOG_ERROR, "Failed to configure remote.");
                         result = FALSE;
@@ -156,7 +156,7 @@ BOOL APB_ConfigureRemote(
 
                 LOG0(LOG_ERROR, "Failed to allocate RDArgs structure.");
 
-                result= FALSE;
+                result = FALSE;
             }
         }
     }
