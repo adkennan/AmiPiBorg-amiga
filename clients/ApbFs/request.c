@@ -1,6 +1,9 @@
 
 #include "apbfs.h"
 
+#include "amipiborg_protos.h"
+#include "amipiborg_pragmas.h"
+
 #include <exec/memory.h>
 
 #include <clib/alib_protos.h>
@@ -14,7 +17,13 @@ struct FsRequest *FS_AllocRequest(
 {
     struct FsRequest *req = NULL;
 
-    if(req = (struct FsRequest *) AllocMem(sizeof(struct FsRequest) + length, MEMF_ANY)) {
+    if(length > 0) {
+        req = APB_AllocObject(vol->v_Fs->fs_Ctx, OT_REQUEST_MAX);
+    } else {
+        req = APB_AllocObject(vol->v_Fs->fs_Ctx, OT_REQUEST_MIN);
+    }
+
+    if(req) {
 
         req->r_Volume = vol;
         req->r_VolId = vol->v_Id;
@@ -64,5 +73,9 @@ VOID FS_AppendArg(
 VOID FS_FreeRequest(
     struct FsRequest *req)
 {
-    FreeMem(req, sizeof(struct FsRequest) + req->r_Length);
+    if(req->r_Length > 0) {
+        APB_FreeObject(req->r_Volume->v_Fs->fs_Ctx, OT_REQUEST_MAX, req);
+    } else {
+        APB_FreeObject(req->r_Volume->v_Fs->fs_Ctx, OT_REQUEST_MIN, req);
+    }
 }

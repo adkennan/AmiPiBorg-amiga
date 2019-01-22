@@ -1,7 +1,6 @@
 #ifndef __APB_CONNECTION_H__
 #define __APB_CONNECTION_H__
 
-#include "objectpool.h"
 #include "packetreader.h"
 #include "packetwriter.h"
 
@@ -20,8 +19,8 @@ enum ConnectionState {
 };
 
 Connection APB_CreateConnection(
+    APTR ctx,
     struct List *cnns,
-    ObjectPool objectPool,
     UWORD connId,
     PacketWriter packetWriter);
 

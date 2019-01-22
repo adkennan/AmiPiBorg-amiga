@@ -12,9 +12,9 @@
 #include <stddef.h>
 #include <stdio.h>
 
-#define VOL_LIST(device) ((struct List *)&(device->fs_Vols))
-#define REQ_LIST(device) ((struct List *)&(device->fs_Reqs))
-#define SENTREQ_LIST(device) ((struct List *)&(device->fs_SentReqs))
+#define VOL_LIST(fs) ((struct List *)&(fs->fs_Vols))
+#define REQ_LIST(fs) ((struct List *)&(fs->fs_Reqs))
+#define SENTREQ_LIST(fs) ((struct List *)&(fs->fs_SentReqs))
 
 #define READ_BUF_SIZE 4096
 
@@ -23,90 +23,114 @@
 struct ApbFs *FS_CreateDevice(
     VOID)
 {
-    struct ApbFs *device;
+    struct ApbFs *fs;
+    APTR      mp;
 
-    if(device = AllocMem(sizeof(struct ApbFs), MEMF_ANY | MEMF_CLEAR)) {
+    if(mp = CreatePool(MEMF_ANY, 4096, 2048)) {
 
-        if(device->fs_ReadBuf = AllocMem(READ_BUF_SIZE, MEMF_ANY)) {
+        if(fs = AllocPooled(mp, sizeof(struct ApbFs))) {
 
-            if(device->fs_RemotePort = CreatePort(NULL, 0)) {
+            fs->fs_MP = mp;
 
-                if(device->fs_Conn = APB_AllocConnection(device->fs_RemotePort, 4, NULL)) {
+            if(fs->fs_Ctx = APB_CreateContext(mp, Output(), LOG_TRACE)) {
 
-                    if(device->fs_Reader = APB_AllocRequest(device->fs_Conn)) {
+                if(fs->fs_ReadBuf = AllocPooled(mp, READ_BUF_SIZE)) {
 
-                        if(device->fs_Writer = APB_AllocRequest(device->fs_Conn)) {
+                    if(fs->fs_RemotePort = CreatePort(NULL, 0)) {
 
-                            if(APB_OpenConnection(device->fs_Conn)) {
+                        if(fs->fs_Conn = APB_AllocConnection(fs->fs_Ctx, fs->fs_RemotePort, 4)) {
 
-                                APB_Log(device->fs_Conn, 5, "Hello From ApbFs");
+                            if(fs->fs_Reader = APB_AllocRequest(fs->fs_Conn)) {
 
-                                device->fs_Status = ST_STARTING;
+                                if(fs->fs_Writer = APB_AllocRequest(fs->fs_Conn)) {
 
-                                NewList(VOL_LIST(device));
+                                    if(APB_OpenConnection(fs->fs_Conn)) {
 
-                                NewList(REQ_LIST(device));
+                                        LOG0(fs->fs_Ctx, LOG_INFO, "Hello From ApbFs");
 
-                                NewList(SENTREQ_LIST(device));
+                                        fs->fs_Status = ST_STARTING;
 
-                                device->fs_WriteReady = TRUE;
+                                        NewList(VOL_LIST(fs));
 
-                                device->fs_Reader->r_Data = device->fs_ReadBuf;
-                                device->fs_Reader->r_Length = READ_BUF_SIZE;
+                                        NewList(REQ_LIST(fs));
 
-                                APB_Read(device->fs_Reader);
+                                        NewList(SENTREQ_LIST(fs));
 
-                                return device;
+                                        fs->fs_WriteReady = TRUE;
+                                        fs->fs_Reader->r_Data = fs->fs_ReadBuf;
+                                        fs->fs_Reader->r_Length = READ_BUF_SIZE;
+
+                                        APB_RegisterObjectType(fs->fs_Ctx, OT_VOLUME, "Volume", sizeof(struct Volume) + MAX_NAME_LEN + 1, 1, 8);
+                                        APB_RegisterObjectType(fs->fs_Ctx, OT_REQUEST_MIN, "Request (Min)", sizeof(struct FsRequest), 1, 100);
+                                        APB_RegisterObjectType(fs->fs_Ctx, OT_REQUEST_MAX, "Request (Max)", sizeof(struct FsRequest) + MAX_WRITE_LEN, 1, 100);
+                                        APB_RegisterObjectType(fs->fs_Ctx, OT_LOCK, "Lock", sizeof(struct FsFileLock), 4, 100);
+
+                                        APB_Read(fs->fs_Reader);
+
+                                        return fs;
+                                    }
+                                    APB_FreeRequest(fs->fs_Writer);
+                                }
+                                APB_FreeRequest(fs->fs_Reader);
                             }
-                            APB_FreeRequest(device->fs_Writer);
+                            APB_FreeConnection(fs->fs_Conn);
                         }
-                        APB_FreeRequest(device->fs_Reader);
+                        DeletePort(fs->fs_RemotePort);
                     }
-                    APB_FreeConnection(device->fs_Conn);
+                    FreePooled(mp, fs->fs_ReadBuf, READ_BUF_SIZE);
                 }
-                DeletePort(device->fs_RemotePort);
+                APB_FreeContext(fs->fs_Ctx);
             }
-            FreeMem(device->fs_ReadBuf, READ_BUF_SIZE);
+            FreePooled(mp, fs, sizeof(struct ApbFs));
         }
-        FreeMem(device, sizeof(struct ApbFs));
+
+        DeletePool(mp);
     }
 
     return NULL;
 }
 
 VOID FS_FreeDevice(
-    struct ApbFs * device)
+    struct ApbFs * fs)
 {
-    if(device->fs_Reader) {
-        APB_FreeRequest(device->fs_Reader);
+    APTR      mp = fs->fs_MP;
+
+    if(fs->fs_Reader) {
+        APB_FreeRequest(fs->fs_Reader);
     }
 
-    if(device->fs_Writer) {
-        APB_FreeRequest(device->fs_Writer);
+    if(fs->fs_Writer) {
+        APB_FreeRequest(fs->fs_Writer);
     }
 
-    if(device->fs_ReadBuf) {
-        FreeMem(device->fs_ReadBuf, READ_BUF_SIZE);
+    if(fs->fs_ReadBuf) {
+        FreePooled(mp, fs->fs_ReadBuf, READ_BUF_SIZE);
     }
 
-    if(device->fs_Conn) {
+    if(fs->fs_Conn) {
 
-        APB_Log(device->fs_Conn, 5, "Goodbye From ApbFs");
+        LOG0(fs->fs_Ctx, LOG_INFO, "Goodbye From ApbFs");
 
-        APB_CloseConnection(device->fs_Conn);
+        APB_CloseConnection(fs->fs_Conn);
 
-        APB_FreeConnection(device->fs_Conn);
+        APB_FreeConnection(fs->fs_Conn);
     }
 
-    if(device->fs_RemotePort) {
-        DeletePort(device->fs_RemotePort);
+    if(fs->fs_RemotePort) {
+        DeletePort(fs->fs_RemotePort);
     }
 
-    while(!IsListEmpty(VOL_LIST(device))) {
-        FS_FreeVolume((struct Volume *) RemHead(VOL_LIST(device)));
+    while(!IsListEmpty(VOL_LIST(fs))) {
+        FS_FreeVolume((struct Volume *) RemHead(VOL_LIST(fs)));
     }
 
-    FreeMem(device, sizeof(struct ApbFs));
+    if(fs->fs_Ctx) {
+        APB_FreeContext(fs->fs_Ctx);
+    }
+
+    FreePooled(mp, fs, sizeof(struct ApbFs));
+
+    DeletePool(mp);
 }
 
 VOID FS_SendReq(
@@ -132,18 +156,52 @@ VOID FS_SendReq(
     fs->fs_WriteReady = FALSE;
 }
 
-VOID FS_CreateNewVolume(
+VOID FS_HandleMountVolume(
     struct ApbFs *fs,
-    struct FsNewVolume *nv)
+    struct FsMountVolume *mv)
 {
     struct Volume *vol;
-    STRPTR    name = (STRPTR) (nv + 1);
 
-    printf("Create volume %d - %s\n", nv->nv_VolId, name);
+    for(vol = (struct Volume *) VOL_LIST(fs)->lh_Head; vol->v_Node.mln_Succ; vol = (struct Volume *) vol->v_Node.mln_Succ) {
+        if(vol->v_Id == mv->mv_VolId) {
 
-    if(vol = FS_CreateVolume(nv->nv_VolId, name)) {
+            LOG2(fs->fs_Ctx, LOG_INFO, "Re-mount volume %d - %s\n", vol->v_Id, vol->v_Name);
+
+            FS_MountVolume(vol);
+
+            return;
+        }
+    }
+
+    if(vol = FS_CreateVolume(fs, mv->mv_VolId, &mv->mv_Name)) {
+
+        LOG2(fs->fs_Ctx, LOG_INFO, "Mount volume %d - %s\n", mv->mv_VolId, &mv->mv_Name);
+
         AddTail(VOL_LIST(fs), (struct Node *) vol);
         fs->fs_VolSigBits |= PORT_BIT(vol->v_Port);
+    }
+}
+
+VOID FS_HandleUnmountVolume(
+    struct ApbFs *fs,
+    struct FsUnmountVolume *uv)
+{
+    struct Volume *vol;
+
+    for(vol = (struct Volume *) VOL_LIST(fs)->lh_Head; vol->v_Node.mln_Succ; vol = (struct Volume *) vol->v_Node.mln_Succ) {
+        if(vol->v_Id == uv->uv_VolId) {
+
+            LOG2(fs->fs_Ctx, LOG_INFO, "Unmount volume %d - %s\n", vol->v_Id, vol->v_Name);
+
+            if(vol->v_LockCount > 0) {
+
+                LOG2(fs->fs_Ctx, LOG_ERROR, "Volume %s has %d outstanding locks", vol->v_Name, vol->v_LockCount);
+            }
+
+            FS_UnmountVolume(vol);
+
+            break;
+        }
     }
 }
 
@@ -152,15 +210,20 @@ VOID FS_ReceiveResponse(
 {
     struct FsResponse *res = (struct FsResponse *) fs->fs_Reader->r_Data;
 
-    if((ULONG) res->r_Req == NEW_VOLUME_KEY) {
+    switch ((ULONG) res->r_Req) {
+    case MOUNT_VOLUME_KEY:
+        FS_HandleMountVolume(fs, (struct FsMountVolume *) res);
+        break;
 
-        FS_CreateNewVolume(fs, (struct FsNewVolume *) res);
+    case UNMOUNT_VOLUME_KEY:
+        FS_HandleUnmountVolume(fs, (struct FsUnmountVolume *) res);
+        break;
 
-    } else {
-
+    default:
         Remove((struct Node *) res->r_Req);
 
-        FS_ReceiveRemoteMessage(fs, res->r_Req->r_Volume, res);
+        FS_ReceiveRemoteMessage(res->r_Req->r_Volume, res);
+        break;
     }
 
     APB_Read(fs->fs_Reader);
@@ -195,32 +258,48 @@ VOID FS_ReceiveFromRemote(
     }
 }
 
+BOOL FS_CanQuit(
+    struct ApbFs *fs)
+{
+    struct Volume *vol;
+
+    for(vol = (struct Volume *) VOL_LIST(fs)->lh_Head; vol->v_Node.mln_Succ; vol = (struct Volume *) vol->v_Node.mln_Succ) {
+        if(vol->v_LockCount > 0) {
+            LOG2(fs->fs_Ctx, LOG_ERROR, "Cannot quit, Volume %s has %d outstanding locks.", vol->v_Name, vol->v_LockCount);
+            return FALSE;
+        }
+    }
+
+    return TRUE;
+}
 
 VOID FS_Run(
-    struct ApbFs *device)
+    struct ApbFs * fs)
 {
     ULONG     sig;
     struct Volume *vol;
 
-    while(device->fs_Status != ST_STOPPING) {
+    while(fs->fs_Status != ST_STOPPING) {
 
-        sig = Wait(PORT_BIT(device->fs_RemotePort) | device->fs_VolSigBits | SIGBREAKF_CTRL_C);
+        sig = Wait(PORT_BIT(fs->fs_RemotePort) | fs->fs_VolSigBits | SIGBREAKF_CTRL_C);
 
-        for(vol = (struct Volume *) VOL_LIST(device)->lh_Head; vol->v_Node.mln_Succ; vol = (struct Volume *) vol->v_Node.mln_Succ) {
+        for(vol = (struct Volume *) VOL_LIST(fs)->lh_Head; vol->v_Node.mln_Succ; vol = (struct Volume *) vol->v_Node.mln_Succ) {
 
             if(sig & PORT_BIT(vol->v_Port)) {
-                FS_ReceiveDosMessage(device, vol);
+                FS_ReceiveDosMessage(vol);
                 break;
             }
         }
 
-        if(sig & PORT_BIT(device->fs_RemotePort)) {
-            FS_ReceiveFromRemote(device);
+        if(sig & PORT_BIT(fs->fs_RemotePort)) {
+            FS_ReceiveFromRemote(fs);
         }
 
         if(sig & SIGBREAKF_CTRL_C) {
-            APB_Log(device->fs_Conn, 5, "Break!");
-            device->fs_Status = ST_STOPPING;
+            LOG0(fs->fs_Ctx, LOG_INFO, "Break!");
+            if(FS_CanQuit(fs)) {
+                fs->fs_Status = ST_STOPPING;
+            }
         }
     }
 }

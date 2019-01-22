@@ -1,7 +1,9 @@
 
 #include "config.h"
 
-#include "log.h"
+#include "amipiborg.h"
+#include "amipiborg_protos.h"
+#include "amipiborg_pragmas.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -11,12 +13,11 @@
 #include <clib/dos_protos.h>
 
 #define ARG_LOGLEVEL 0
-#define ARG_QUIET 1
-#define ARG_REMOTE 2
-#define ARG_REMARGS 3
-#define ARGS_LEN 4
+#define ARG_REMOTE 1
+#define ARG_REMARGS 2
+#define ARGS_LEN 3
 
-#define TEMPLATE "L=LOGLEVEL/K,Q=QUIET/S,R=REMOTE/K,REMOTEARGS/F"
+#define TEMPLATE "L=LOGLEVEL/K,R=REMOTE/K,REMOTEARGS/F"
 
 VOID APB_ShowError(
     STRPTR msg)
@@ -32,17 +33,15 @@ VOID APB_ShowError(
 }
 
 struct Config *APB_GetConfig(
-    MemoryPool mp)
+    APTR ctx)
 {
     struct RDArgs *rd;
     struct Config *cfg = NULL;
     WORD      logLevel = LOG_INFO;
-    BOOL      logToStdOut = TRUE;
     UWORD     len1, len2 = 0;
 
     LONG      argArr[ARGS_LEN] = {
         (LONG) "I",
-        0,
         (LONG) "serialremote.library",
         0
     };
@@ -60,10 +59,6 @@ struct Config *APB_GetConfig(
         }
     }
 
-    if(argArr[ARG_QUIET]) {
-        logToStdOut = FALSE;
-    }
-
     len1 = strlen((STRPTR) argArr[ARG_REMOTE]) + 1;
     if(len1 % 2) {
         len1++;
@@ -73,15 +68,16 @@ struct Config *APB_GetConfig(
         len2 = strlen((STRPTR) argArr[ARG_REMARGS]) + 2;
     }
 
-    if(!(cfg = (struct Config *) APB_AllocMem(mp, sizeof(struct Config) + len1 + len2))) {
+    if(!(cfg = (struct Config *) APB_AllocMem(ctx, sizeof(struct Config) + len1 + len2))) {
         APB_ShowError("Unable to allocate config structure.");
         goto done;
     }
 
-    cfg->cf_MemPool = mp;
+    cfg->cf_Ctx = ctx;
     cfg->cf_Size = len1 + len2;
-    cfg->cf_LogLevel = logLevel;
-    cfg->cf_LogToStdOut = logToStdOut;
+
+    APB_SetLogLevel(ctx, logLevel);
+
     cfg->cf_RemoteName = (STRPTR) APB_PointerAdd(cfg, sizeof(struct Config));
     strcpy(cfg->cf_RemoteName, (STRPTR) argArr[ARG_REMOTE]);
 
@@ -105,7 +101,7 @@ struct Config *APB_GetConfig(
 VOID APB_FreeConfig(
     struct Config * cfg)
 {
-    APB_FreeMem(cfg->cf_MemPool, cfg, sizeof(struct Config) + cfg->cf_Size);
+    APB_FreeMem(cfg->cf_Ctx, cfg, sizeof(struct Config) + cfg->cf_Size);
 }
 
 BOOL APB_ConfigureRemote(
@@ -120,7 +116,7 @@ BOOL APB_ConfigureRemote(
 
         if(cfg->cf_RemoteArgs && strlen(cfg->cf_RemoteArgs) > 0) {
 
-            LOG1(LOG_DEBUG, "Confguring remote with args \"%s\"", cfg->cf_RemoteArgs);
+            LOG1(cfg->cf_Ctx, LOG_DEBUG, "Confguring remote with args \"%s\"", cfg->cf_RemoteArgs);
 
             if(rda = (struct RDArgs *) AllocDosObject(DOS_RDARGS, NULL)) {
 
@@ -131,7 +127,7 @@ BOOL APB_ConfigureRemote(
 
                     if(!REM_ConfigureRemote(rem, ra)) {
 
-                        LOG0(LOG_ERROR, "Failed to configure remote.");
+                        LOG0(cfg->cf_Ctx, LOG_ERROR, "Failed to configure remote.");
                         result = FALSE;
                     }
 
@@ -139,7 +135,7 @@ BOOL APB_ConfigureRemote(
 
                 } else {
 
-                    LOG0(LOG_ERROR, "Failed to parse args for remote");
+                    LOG0(cfg->cf_Ctx, LOG_ERROR, "Failed to parse args for remote");
 
                     result = FALSE;
 
@@ -154,7 +150,7 @@ BOOL APB_ConfigureRemote(
 
             } else {
 
-                LOG0(LOG_ERROR, "Failed to allocate RDArgs structure.");
+                LOG0(cfg->cf_Ctx, LOG_ERROR, "Failed to allocate RDArgs structure.");
 
                 result = FALSE;
             }

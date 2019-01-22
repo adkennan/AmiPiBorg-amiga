@@ -3,31 +3,47 @@
 
 #include <clib/exec_protos.h>
 
-VOID     *APB_AllocMem(
+APTR APB_AllocMemInternal(
     APTR memPool,
-    ULONG memSize)
+    ULONG size)
 {
     if(memPool == NULL) {
 
-        return AllocMem(memSize, MEMF_CLEAR);
+        return AllocMem(size, MEMF_CLEAR);
 
     } else {
 
-        return AllocPooled(memPool, memSize);
+        return AllocPooled(memPool, size);
     }
 }
 
-VOID APB_FreeMem(
+VOID APB_FreeMemInternal(
     APTR memPool,
-    VOID * mem,
-    ULONG memSize)
+    APTR memory,
+    ULONG size)
 {
+
     if(memPool == NULL) {
 
-        FreeMem(mem, memSize);
+        FreeMem(memory, size);
 
     } else {
 
-        FreePooled(memPool, mem, memSize);
+        FreePooled(memPool, memory, size);
     }
+}
+
+APTR __asm __saveds APB_AllocMem(
+    register __a0 APTR ctx,
+    register __d0 ULONG size)
+{
+    return APB_AllocMemInternal(((struct ApbContext *) ctx)->ctx_MemPool, size);
+}
+
+VOID __asm __saveds APB_FreeMem(
+    register __a0 APTR ctx,
+    register __a1 APTR memory,
+    register __d0 ULONG size)
+{
+    APB_FreeMemInternal(((struct ApbContext *) ctx)->ctx_MemPool, memory, size);
 }

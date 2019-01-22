@@ -13,12 +13,12 @@ VOID APB_Log(
     UWORD level,
     STRPTR fmt,
     ...)
-{     
-    APTR args;
+{
+    APTR      args;
 
-    if( APB_ShouldLog(ctx, level) ) {
+    if(APB_ShouldLog(ctx, level)) {
 
-        args = (APTR)APB_PointerAdd(&fmt,sizeof(STRPTR));
+        args = (APTR) APB_PointerAdd(&fmt, sizeof(STRPTR));
 
         APB_LogArgArray(ctx, file, line, func, level, fmt, args);
 
@@ -40,5 +40,3 @@ WORD APB_GetLogLevel(
 
     return -1;
 }
-
-

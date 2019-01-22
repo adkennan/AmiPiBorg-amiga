@@ -1,14 +1,16 @@
 
 #include "packetwriter.h"
 #include "buffer.h"
-#include "stats.h"
-#include "memory.h"
 #include "protocol.h"
 #include "remote.h"
-#include "log.h"
+#include "objtype.h"
 
 #include "remote_protos.h"
 #include "remote_pragmas.h"
+
+#include "amipiborg.h"
+#include "amipiborg_protos.h"
+#include "amipiborg_pragmas.h"
 
 #include <clib/exec_protos.h>
 #include <clib/alib_protos.h>
@@ -33,8 +35,7 @@ struct OutPacket {
 };
 
 struct PacketWriter {
-    MemoryPool pw_MemPool;
-    ObjectPool pw_ObjPool;
+    APTR      pw_Ctx;
     struct MinList pw_Queue;
     struct MinList pw_RecentPackets;
     struct OutBuffer *pw_OutBuf;
@@ -47,26 +48,24 @@ struct PacketWriter {
 #define PW_PACKS(pw) ((struct List *)&pw->pw_RecentPackets)
 
 PacketWriter APB_CreatePacketWriter(
-    MemoryPool memPool,
-    ObjectPool objPool)
+    APTR ctx)
 {
     struct PacketWriter *pw;
 
-    if(!APB_TypeRegistered(objPool, OT_OUT_BUFFER)) {
-        APB_RegisterObjectType(objPool, OT_OUT_BUFFER, sizeof(struct OutBuffer), MIN_BUFFERS, MAX_BUFFERS);
+    if(!APB_TypeRegistered(ctx, OT_OUT_BUFFER)) {
+        APB_RegisterObjectType(ctx, OT_OUT_BUFFER, "Outgoing Buffer", sizeof(struct OutBuffer), MIN_BUFFERS, MAX_BUFFERS);
     }
 
-    if(!APB_TypeRegistered(objPool, OT_OUT_PACKET)) {
-        APB_RegisterObjectType(objPool, OT_OUT_PACKET, sizeof(struct OutPacket), MIN_BUFFERS * 10, MAX_BUFFERS * 10);
+    if(!APB_TypeRegistered(ctx, OT_OUT_PACKET)) {
+        APB_RegisterObjectType(ctx, OT_OUT_PACKET, "Outgoing Packet", sizeof(struct OutPacket), MIN_BUFFERS * 10, MAX_BUFFERS * 10);
     }
 
-    if(!(pw = APB_AllocMem(memPool, sizeof(struct PacketWriter)))) {
-        LOG0(LOG_ERROR, "Unable to allocate memory for PacketWriter");
+    if(!(pw = APB_AllocMem(ctx, sizeof(struct PacketWriter)))) {
+        LOG0(ctx, LOG_ERROR, "Unable to allocate memory for PacketWriter");
         return NULL;
     }
 
-    pw->pw_MemPool = memPool;
-    pw->pw_ObjPool = objPool;
+    pw->pw_Ctx = ctx;
     pw->pw_OutBuf = NULL;
     pw->pw_RecentCount = 0;
     pw->pw_BufCount = 0;
@@ -81,22 +80,22 @@ VOID APB_ReleaseOutBuffer(
     struct PacketWriter * pw,
     struct OutBuffer * ob)
 {
-    LOG1(LOG_TRACE, "Release OutBuffer 0x%x", ob);
+    LOG1(pw->pw_Ctx, LOG_TRACE, "Release OutBuffer 0x%x", ob);
     APB_ReleaseBuffer(ob->ob_Buf);
-    APB_FreeObject(pw->pw_ObjPool, OT_OUT_BUFFER, ob);
+    APB_FreeObject(pw->pw_Ctx, OT_OUT_BUFFER, ob);
 }
 
 VOID APB_ReleaseOutPacket(
     struct PacketWriter *pw,
     struct OutPacket *op)
 {
-    LOG1(LOG_TRACE, "Release OutPacket 0x%x", op);
+    LOG1(pw->pw_Ctx, LOG_TRACE, "Release OutPacket 0x%x", op);
 
     op->op_OutBuf->ob_PacketCount--;
     if(op->op_OutBuf->ob_PacketCount == 0 && op->op_OutBuf->ob_CanRelease) {
         APB_ReleaseOutBuffer(pw, op->op_OutBuf);
     }
-    APB_FreeObject(pw->pw_ObjPool, OT_OUT_PACKET, op);
+    APB_FreeObject(pw->pw_Ctx, OT_OUT_PACKET, op);
 }
 
 VOID APB_DestroyPacketWriter(
@@ -104,7 +103,7 @@ VOID APB_DestroyPacketWriter(
 {
     struct PacketWriter *pw = (struct PacketWriter *) packetWriter;
 
-    LOG0(LOG_TRACE, "Destroy Packet Writer");
+    LOG0(pw->pw_Ctx, LOG_TRACE, "Destroy Packet Writer");
 
     while(!IsListEmpty(PW_QUEUE(pw))) {
 
@@ -116,7 +115,7 @@ VOID APB_DestroyPacketWriter(
         APB_ReleaseOutPacket(pw, (struct OutPacket *) RemHead(PW_PACKS(pw)));
     }
 
-    APB_FreeMem(pw->pw_MemPool, pw, sizeof(struct PacketWriter));
+    APB_FreeMem(pw->pw_Ctx, pw, sizeof(struct PacketWriter));
 }
 
 struct Packet *APB_AllocPacket(
@@ -139,17 +138,17 @@ struct Packet *APB_AllocPacketWithId(
     struct OutPacket *op;
     struct OutPacket *op2;
 
-    LOG2(LOG_TRACE, "Allocate Packet Id = %d, Length = %d", packId, length);
+    LOG2(pw->pw_Ctx, LOG_TRACE, "Allocate Packet Id = %d, Length = %d", packId, length);
 
     if(length > BUFFER_SIZE) {
         // Packet too big!
-        LOG1(LOG_ERROR, "Packet size %d too large", length);
+        LOG1(pw->pw_Ctx, LOG_ERROR, "Packet size %d too large", length);
         return NULL;
     }
 
     if(length < sizeof(struct Packet)) {
         // Packet length too small.
-        LOG1(LOG_ERROR, "Packet size %d too small", length);
+        LOG1(pw->pw_Ctx, LOG_ERROR, "Packet size %d too small", length);
         return NULL;
     }
 
@@ -159,13 +158,14 @@ struct Packet *APB_AllocPacketWithId(
        || (ob->ob_Buf->b_Offset + length + 1) >= BUFFER_SIZE)   // No room left in buffer
 
     {
-        LOG0(LOG_TRACE, "Allocate New OutBuffer");
+        LOG0(pw->pw_Ctx, LOG_TRACE, "Allocate New OutBuffer");
 
-        if(!(ob = (struct OutBuffer *) APB_AllocObject(pw->pw_ObjPool, OT_OUT_BUFFER))) {
+        if(!(ob = (struct OutBuffer *) APB_AllocObject(pw->pw_Ctx, OT_OUT_BUFFER))) {
+            LOG0(pw->pw_Ctx, LOG_ERROR, "Cannot allocate OutBuffer");
             return NULL;
         }
 
-        if(!(ob->ob_Buf = APB_AllocateBuffer(pw->pw_ObjPool))) {
+        if(!(ob->ob_Buf = APB_AllocateBuffer(pw->pw_Ctx))) {
             return NULL;
         }
 
@@ -178,11 +178,11 @@ struct Packet *APB_AllocPacketWithId(
         AddTail(PW_QUEUE(pw), (struct Node *) ob);
         pw->pw_BufCount++;
 
-        APB_IncrementStat(ST_Q_OUTGOING_SIZE, 1);
+//        APB_IncrementStat(ST_Q_OUTGOING_SIZE, 1);
     }
 
-    if(!(op = (struct OutPacket *) APB_AllocObject(pw->pw_ObjPool, OT_OUT_PACKET))) {
-        LOG0(LOG_ERROR, "Failed to allocate outgoing packet");
+    if(!(op = (struct OutPacket *) APB_AllocObject(pw->pw_Ctx, OT_OUT_PACKET))) {
+        LOG0(pw->pw_Ctx, LOG_ERROR, "Cannot allocate outgoing packet");
         return NULL;
     }
 
@@ -220,7 +220,7 @@ struct Packet *APB_AllocPacketWithId(
     AddTail(PW_PACKS(pw), (struct Node *) op);
     pw->pw_RecentCount++;
 
-    APB_IncrementStat(ST_PAC_SENT, 1);
+//    APB_IncrementStat(ST_PAC_SENT, 1);
 
     return op->op_Pac;
 }
@@ -246,7 +246,7 @@ VOID APB_WriteBuffer(
 
             if(op->op_OutBuf == ob && !op->op_Sent) {
 
-                LOG1(LOG_TRACE, "Sending Packet %d", op->op_Pac->pac_PackId);
+                LOG1(pw->pw_Ctx, LOG_TRACE, "Sending Packet %d", op->op_Pac->pac_PackId);
 
                 ps = sizeof(struct Packet) + op->op_Pac->pac_Length + (op->op_Pac->pac_Length % 2 == 1 ? 1 : 0);
                 op->op_Pac->pac_Checksum = APB_CalculateChecksum((UWORD *) op->op_Pac, ps);
@@ -257,15 +257,15 @@ VOID APB_WriteBuffer(
         bc = ob->ob_Buf->b_Offset - ob->ob_Offset;
         data = APB_PointerAdd(ob->ob_Buf->b_Data, ob->ob_Offset);
 
-        LOG1(LOG_DEBUG, "Write %d bytes", bc);
+        LOG1(pw->pw_Ctx, LOG_DEBUG, "Write %d bytes", bc);
 
-        if(APB_ShouldLog(LOG_TRACE)) {
-            APB_LogMem(__FILE__, __LINE__, __FUNC__, LOG_TRACE, data, bc);
-        }
+//        if(APB_ShouldLog(LOG_TRACE)) {
+//            APB_LogMem(__FILE__, __LINE__, __FUNC__, LOG_TRACE, data, bc);
+//        }
 
         REM_Write(remote, data, bc);
 
-        APB_IncrementStat(ST_BYTES_SENT, bc);
+//        APB_IncrementStat(ST_BYTES_SENT, bc);
 
         ob->ob_Offset = ob->ob_Buf->b_Offset;
     }
@@ -278,7 +278,7 @@ VOID APB_WriteBuffer(
         Remove((struct Node *) ob);
         pw->pw_BufCount--;
 
-        APB_IncrementStat(ST_Q_OUTGOING_SIZE, -1);
+//        APB_IncrementStat(ST_Q_OUTGOING_SIZE, -1);
     }
 }
 

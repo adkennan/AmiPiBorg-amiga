@@ -6,8 +6,6 @@
 #include <exec/lists.h>
 
 #include "protocol.h"
-#include "memory.h"
-#include "objectpool.h"
 
 typedef APTR InBuffer;
 
@@ -30,8 +28,7 @@ struct InPacket {
 // Packet Reader
 
 PacketReader APB_CreatePacketReader(
-    MemoryPool memPool,
-    ObjectPool objPool);
+    APTR ctx);
 
 VOID      APB_DestroyPacketReader(
     PacketReader pr);

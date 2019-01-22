@@ -33,8 +33,8 @@ struct ObjectType {
 struct ObjectPool {
 
     struct MinList op_Types;
-    APTR op_MemPool;
-    APTR op_Log;
+    APTR      op_MemPool;
+    APTR      op_Log;
 };
 
 #define TYPE_LIST(pool) ((struct List *)&pool->op_Types)
@@ -132,7 +132,7 @@ struct MinNode *APB_AllocInstance(
 }
 
 VOID APB_ReleaseInstance(
-    struct ObjectPool *op,
+    struct ObjectPool * op,
     struct ObjectType * ot,
     struct MinNode * obj)
 {
@@ -157,8 +157,7 @@ VOID APB_ReleaseInstance(
 
 APTR APB_CreateObjectPool(
     APTR memPool,
-    APTR log
-)
+    APTR log)
 {
     struct ObjectPool *op;
 
@@ -184,7 +183,7 @@ VOID APB_FreeObjectPool(
         ot = (struct ObjectType *) RemTail(TYPE_LIST(op));
         APB_DestroyObjectType(op, ot);
     }
-    
+
     APB_FreeMemInternal(op->op_MemPool, op, sizeof(struct ObjectPool));
 }
 
@@ -300,45 +299,44 @@ VOID APB_FreeObjectInternal(
 
 
 BOOL __asm __saveds APB_TypeRegistered(
-	register __a0 APTR ctx,
+    register __a0 APTR ctx,
     register __d0 UWORD id)
 {
-    struct ObjectPool *op = (struct ObjectPool *)((struct ApbContext *)ctx)->ctx_ObjPool;
+    struct ObjectPool *op = (struct ObjectPool *) ((struct ApbContext *) ctx)->ctx_ObjPool;
 
     return APB_TypeRegisteredInternal(op, id);
 }
 
 
 VOID __asm __saveds APB_RegisterObjectType(
-	register __a0 APTR ctx,
+    register __a0 APTR ctx,
     register __d0 UWORD id,
     register __a1 STRPTR name,
     register __d1 UWORD size,
     register __d2 UWORD minInstances,
     register __d3 UWORD maxInstances)
 {
-    struct ObjectPool *op = (struct ObjectPool *)((struct ApbContext *)ctx)->ctx_ObjPool;
+    struct ObjectPool *op = (struct ObjectPool *) ((struct ApbContext *) ctx)->ctx_ObjPool;
 
     APB_RegisterObjectTypeInternal(op, id, name, size, minInstances, maxInstances);
 }
 
 
 APTR __asm __saveds APB_AllocObject(
-	register __a0 APTR ctx,
+    register __a0 APTR ctx,
     register __d0 UWORD id)
 {
-    struct ObjectPool *op = (struct ObjectPool *)((struct ApbContext *)ctx)->ctx_ObjPool;
+    struct ObjectPool *op = (struct ObjectPool *) ((struct ApbContext *) ctx)->ctx_ObjPool;
 
     return APB_AllocObjectInternal(op, id);
 }
 
 VOID __asm __saveds APB_FreeObject(
-	register __a0 APTR ctx,
+    register __a0 APTR ctx,
     register __d0 UWORD id,
     register __a1 APTR obj)
 {
-    struct ObjectPool *op = (struct ObjectPool *)((struct ApbContext *)ctx)->ctx_ObjPool;
+    struct ObjectPool *op = (struct ObjectPool *) ((struct ApbContext *) ctx)->ctx_ObjPool;
 
     APB_FreeObjectInternal(op, id, obj);
 }
-

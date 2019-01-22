@@ -1,5 +1,7 @@
 
 #include <exec/types.h>
+#include <utility/utility.h>
+
 #include <clib/exec_protos.h>
 #include <pragmas/exec_pragmas.h>
 
@@ -122,6 +124,9 @@ APTR      FuncTable[] = {
     _LibExpunge,
     _ExtFuncLib,
 
+    APB_CreateContext,
+    APB_FreeContext,
+
     APB_AllocConnection,
     APB_FreeConnection,
 
@@ -138,16 +143,29 @@ APTR      FuncTable[] = {
 
     APB_SrvQuit,
     APB_SrvSetLogLevel,
-    APB_SrvGetLog,
-    APB_SrvGetConnections,
-    APB_SrvGetStats,
 
-    APB_Log,
+    APB_AllocMem,
+    APB_FreeMem,
+
+    APB_RegisterStat,
+    APB_IncrementStat,
+    APB_GetStat,
+
+    APB_SetLogLevel,
+    APB_LogArgArray,
+    APB_ShouldLog,
+
+    APB_TypeRegistered,
+    APB_RegisterObjectType,
+    APB_AllocObject,
+    APB_FreeObject,
 
     (APTR) - 1
 };
 
 struct Library *SysBase = NULL;
+struct Library *UtilityBase = NULL;
+struct Library *DOSBase = NULL;
 struct AmiPiBorgLibrary *AmiPiBorgBase = NULL;
 
 struct AmiPiBorgLibrary *__saveds __asm InitLib(
@@ -161,7 +179,18 @@ struct AmiPiBorgLibrary *__saveds __asm InitLib(
     AmiPiBorgBase->l_ExecBase = sysBase;
     AmiPiBorgBase->l_SegList = segList;
 
-    return AmiPiBorgBase;
+    if(AmiPiBorgBase->l_UtilityBase = OpenLibrary(UTILITYNAME, 37)) {
+        UtilityBase = AmiPiBorgBase->l_UtilityBase;
+
+        if(AmiPiBorgBase->l_DOSBase = OpenLibrary(DOSNAME, 37)) {
+            DOSBase = AmiPiBorgBase->l_DOSBase;
+
+            return AmiPiBorgBase;
+        }
+    }
+
+    FreeLib(AmiPiBorgBase);
+    return NULL;
 }
 
 struct AmiPiBorgLibrary *__saveds __asm _LibOpen(
@@ -193,6 +222,14 @@ BPTR __saveds __asm _LibExpunge(
     BPTR      segList;
 
     if(amiPiBorgBase->l_Lib.lib_OpenCnt == 0) {
+
+        if(amiPiBorgBase->l_UtilityBase) {
+            CloseLibrary(amiPiBorgBase->l_UtilityBase);
+        }
+
+        if(amiPiBorgBase->l_DOSBase) {
+            CloseLibrary(amiPiBorgBase->l_DOSBase);
+        }
 
         segList = amiPiBorgBase->l_SegList;
 

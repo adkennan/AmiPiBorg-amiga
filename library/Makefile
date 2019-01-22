@@ -3,39 +3,24 @@ LIBNAME=	amipiborg
 VERSION=	1
 REVISION=	0
 
-INC=		/include
-DIR=		/bin/
-
-
 LIBFILE=	$(LIBNAME).library
-LIBDIR=		$(DIR)
-
-FD_CONV=	SC:c/fd2pragma
 FD_FILE=	$(LIBNAME).fd
-PRAGMA_FILE=	$(INC)/$(LIBNAME)_pragmas.h
 
-DEF_DEBUG=opt
+PRAGMA_FILE=	$(ROOT)$(INC)/$(LIBNAME)_pragmas.h
 
-C_COMPILER=	SC:c/sc
+SCFLAGS=$(LIBFLAGS) CPU=$(CPU) $(DEF_LOGGING) $(DEF_DEBUG) INCLUDEDIRECTORY=$(ROOT)$(INC)
 
-CPU=		68030
-C_OPTS=		CPU=$(CPU) NOICONS STREQ STRMER NOSTKCHK NOSTANDARDIO INCLUDEDIRECTORY=$(INC) $(DEF_EBUG)
+OBJECTS=lib.o context.o log.o stats.o memory.o connection.o request.o io.o control.o objectpool.o
 
-LINKER=		SC:c/slink
-
-C_SOURCES=	lib.c memory.c connection.c request.c io.c control.c
-
-OBJECTS=	lib.o memory.o connection.o request.o io.o control.o
-
-LIBS=		LIB:sc.lib LIB:amiga.lib
+LIBS=LIB:sc.lib LIB:amiga.lib
 
 ################
 #
 # Build Library
 
 $(LIBFILE): $(OBJECTS) $(LIBS) $(PRAGMA_FILE)
-	$(LINKER) WITH << 
-TO $(LIBDIR)$(LIBFILE)
+	$(LD) WITH << 
+TO $(ROOT)$(OUTDIR)$(LIBFILE)
 FROM $(OBJECTS)
 LIBFD $(FD_FILE)
 LIBVERSION $(VERSION)
@@ -43,20 +28,16 @@ LIBREVISION $(REVISION)
 LIB $(LIBS) NOICONS ADDSYM
 <
 
-
 $(PRAGMA_FILE): $(FD_FILE).h
-
-.c.o:
-	$(C_COMPILER) $(C_OPTS) $*.c
 
 $(FD_FILE).h:
 	$(FD_CONV) $(FD_FILE) $(PRAGMA_FILE)
 
 clean:
 	@Delete $(OBJECTS)
-	@Delete $(LIBDIR)$(LIBFILE)(|.info)
+	@Delete $(ROOT)$(OUTDIR)$(LIBFILE)(|.info)
 	@Delete $(PRAGMA_FILE)
 
 reload:
-	@version $(LIBFILE)
+	@version $(ROOT)$(OUTDIR)$(LIBFILE)
 	@flushlibs

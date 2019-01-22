@@ -33,9 +33,9 @@ APTR APB_CreateLogger(
     UWORD level)
 {
     struct Logger *l;
-    UWORD ix;
+    UWORD     ix;
 
-    if( l = (struct Logger *)APB_AllocMemInternal(memPool, sizeof(struct Logger))) {
+    if(l = (struct Logger *) APB_AllocMemInternal(memPool, sizeof(struct Logger))) {
 
         l->l_MemPool = memPool;
         l->l_OutputFh = outputFh;
@@ -44,19 +44,19 @@ APTR APB_CreateLogger(
         l->l_End = 0;
     }
 
-    for( ix = 0; ix <= LOG_BUF_LEN; ix++ ) {
+    for(ix = 0; ix <= LOG_BUF_LEN; ix++) {
         l->l_Buf[ix] = '\0';
     }
-    
+
     return l;
 }
 
 VOID APB_FreeLogger(
     APTR logger)
 {
-    struct Logger *l = (struct Logger *)logger;
+    struct Logger *l = (struct Logger *) logger;
 
-    if( l->l_Buf ) {
+    if(l->l_Buf) {
         APB_FreeMemInternal(l->l_MemPool, l->l_Buf, LOG_BUF_LEN + 1);
     }
 
@@ -67,28 +67,28 @@ BOOL APB_ShouldLogInternal(
     APTR logger,
     UWORD level)
 {
-    struct Logger *l = (struct Logger *)logger;
+    struct Logger *l = (struct Logger *) logger;
 
-    if(level <= l->l_Level && l->l_OutputFh ) {
+    if(level <= l->l_Level && l->l_OutputFh) {
         return TRUE;
     }
     return FALSE;
 }
 
 BOOL __asm __saveds APB_ShouldLog(
-	register __a0 APTR ctx,
-	register __d0 UWORD level)
+    register __a0 APTR ctx,
+    register __d0 UWORD level)
 {
-    struct Logger *logger = (struct Logger *)((struct ApbContext *)ctx)->ctx_Logger;
- 
-    return APB_ShouldLogInternal(logger, level);   
+    struct Logger *logger = (struct Logger *) ((struct ApbContext *) ctx)->ctx_Logger;
+
+    return APB_ShouldLogInternal(logger, level);
 }
 
 VOID APB_LogByte(
-    struct Logger *l,
+    struct Logger * l,
     BYTE c)
 {
-    if( l->l_End >= LOG_BUF_LEN ) {
+    if(l->l_End >= LOG_BUF_LEN) {
         return;
     }
 
@@ -97,7 +97,7 @@ VOID APB_LogByte(
 }
 
 UWORD APB_LogString(
-    struct Logger *l,
+    struct Logger * l,
     STRPTR s,
     UWORD width,
     UWORD flags)
@@ -141,7 +141,7 @@ UWORD APB_LogString(
 }
 
 UWORD APB_LogNumber(
-    struct Logger *l,
+    struct Logger * l,
     LONG v,
     UWORD base,
     UWORD width,
@@ -185,7 +185,7 @@ UWORD APB_LogNumber(
 }
 
 UWORD APB_LogLevel(
-    struct Logger *l,
+    struct Logger * l,
     UWORD level)
 {
     if(level == LOG_ERROR) {
@@ -207,7 +207,8 @@ VOID __asm __saveds APB_SetLogLevel(
     register __d0 UWORD level)
 {
 
-    struct Logger *l = (struct Logger *)((struct ApbContext *)ctx)->ctx_Logger;
+    struct Logger *l = (struct Logger *) ((struct ApbContext *) ctx)->ctx_Logger;
+
     l->l_Level = level;
 }
 
@@ -242,10 +243,10 @@ VOID APB_LogArgArrayInternal(
     UWORD     width;
     UWORD     flags;
     UWORD     c;
-    struct Logger *l = (struct Logger *)logger;
-    ULONG *aa = (ULONG *)args;
-    
-    if( ! l->l_OutputFh ) {
+    struct Logger *l = (struct Logger *) logger;
+    ULONG    *aa = (ULONG *) args;
+
+    if(!l->l_OutputFh) {
         return;
     }
 
@@ -307,7 +308,7 @@ VOID APB_LogArgArrayInternal(
                 break;
 
             case 'c':
-                l->l_NumBuf[0] = (BYTE)GETARG(aa);
+                l->l_NumBuf[0] = (BYTE) GETARG(aa);
                 if(l->l_NumBuf[0] < ' ') {
                     l->l_NumBuf[0] = '.';
                 }
@@ -316,7 +317,7 @@ VOID APB_LogArgArrayInternal(
                 break;
 
             case 's':
-                c += APB_LogString(l, (STRPTR)GETARG(aa), width, flags);
+                c += APB_LogString(l, (STRPTR) GETARG(aa), width, flags);
                 break;
 
             default:
@@ -331,8 +332,8 @@ VOID APB_LogArgArrayInternal(
     APB_LogByte(l, '\n');
     APB_LogByte(l, '\0');
 
-    if( l->l_OutputFh ) {
-        FPuts(l->l_OutputFh, (STRPTR)l->l_Buf);
+    if(l->l_OutputFh) {
+        FPuts(l->l_OutputFh, (STRPTR) l->l_Buf);
     }
 }
 
@@ -345,10 +346,9 @@ VOID APB_Log(
     STRPTR fmt,
     ...)
 {
-    APTR args = (APTR)APB_PointerAdd(&fmt,sizeof(STRPTR));      
+    APTR      args = (APTR) APB_PointerAdd(&fmt, sizeof(STRPTR));
 
-    APB_LogArgArrayInternal(
-        logger, file, line, func, level, fmt, args);
+    APB_LogArgArrayInternal(logger, file, line, func, level, fmt, args);
 }
 
 VOID __asm __saveds APB_LogArgArray(
@@ -358,14 +358,12 @@ VOID __asm __saveds APB_LogArgArray(
     register __a2 STRPTR func,
     register __d1 UWORD level,
     register __a5 STRPTR fmt,
-    register __d2 APTR args
-)
+    register __d2 APTR args)
 {
-    struct ApbContext *context = (struct ApbContext *)ctx;
-    struct Logger *logger = (struct Logger *)context->ctx_Logger;
-    
-    APB_LogArgArrayInternal(
-        logger, file, line, func, level, fmt, args);    
+    struct ApbContext *context = (struct ApbContext *) ctx;
+    struct Logger *logger = (struct Logger *) context->ctx_Logger;
+
+    APB_LogArgArrayInternal(logger, file, line, func, level, fmt, args);
 }
 
 VOID APB_LogMemInternal(

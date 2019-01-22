@@ -1,34 +1,41 @@
 
 #include "buffer.h"
-#include "stats.h"
-#include "log.h"
+#include "objtype.h"
+
+#include "amipiborg.h"
+#include "amipiborg_protos.h"
+#include "amipiborg_pragmas.h"
 
 #include <clib/exec_protos.h>
 #include <clib/alib_protos.h>
 
 struct Buffer *APB_AllocateBuffer(
-    ObjectPool objPool)
+    APTR ctx)
 {
     struct Buffer *buf;
 
-    if(!APB_TypeRegistered(objPool, OT_BUFFER)) {
-        APB_RegisterObjectType(objPool, OT_BUFFER, sizeof(struct Buffer), MIN_BUFFERS, MAX_BUFFERS);
+    if(!APB_TypeRegistered(ctx, OT_BUFFER)) {
+        APB_RegisterObjectType(ctx, OT_BUFFER, "Buffer", sizeof(struct Buffer), MIN_BUFFERS, MAX_BUFFERS);
     }
 
-    if(!(buf = (struct Buffer *) APB_AllocObject(objPool, OT_BUFFER))) {
-
-        LOG0(LOG_ERROR, "Unable to allocate buffer");
-
-        APB_IncrementStat(ST_BUF_ALLOC_FAILURES, 1);
+    if(!APB_TypeRegistered(ctx, OT_BUFFER)) {
         return NULL;
     }
 
-    LOG1(LOG_TRACE, "Buffer 0x%00000000x Allocated", buf);
+    if(!(buf = (struct Buffer *) APB_AllocObject(ctx, OT_BUFFER))) {
 
-    buf->b_ObjPool = objPool;
+//        LOG0(ctx, LOG_ERROR, "Unable to allocate buffer");
+
+//        APB_IncrementStat(ST_BUF_ALLOC_FAILURES, 1);
+        return NULL;
+    }
+
+    LOG1(ctx, LOG_TRACE, "Buffer 0x%00000000x Allocated", buf);
+
+    buf->b_Ctx = ctx;
     buf->b_Offset = 0;
 
-    APB_IncrementStat(ST_BUF_ALLOCATED, 1);
+//    APB_IncrementStat(ST_BUF_ALLOCATED, 1);
 
     return buf;
 }
@@ -36,9 +43,9 @@ struct Buffer *APB_AllocateBuffer(
 VOID APB_ReleaseBuffer(
     struct Buffer * buf)
 {
-    LOG1(LOG_TRACE, "Buffer 0x%00000000x Freed", buf);
+    LOG1(buf->b_Ctx, LOG_TRACE, "Buffer 0x%00000000x Freed", buf);
 
-    APB_FreeObject(buf->b_ObjPool, OT_BUFFER, buf);
+    APB_FreeObject(buf->b_Ctx, OT_BUFFER, buf);
 
-    APB_IncrementStat(ST_BUF_ALLOCATED, -1);
+//    APB_IncrementStat(ST_BUF_ALLOCATED, -1);
 }

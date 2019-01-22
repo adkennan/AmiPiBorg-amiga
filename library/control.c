@@ -29,7 +29,7 @@ UWORD SendControlMessage(
             req->r_Req.r_Length = length;
             req->r_Req.r_Data = data;
 
-            APB_PutMsg((struct Message *) req);
+            APB_PutMsg(NULL, (struct Message *) req);
 
             sig = Wait(1 << port->mp_SigBit | SIGBREAKF_CTRL_C);
 

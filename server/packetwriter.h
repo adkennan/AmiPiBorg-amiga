@@ -6,15 +6,12 @@
 #include <exec/lists.h>
 
 #include "protocol.h"
-#include "memory.h"
-#include "objectpool.h"
 #include "remote.h"
 
 typedef APTR PacketWriter;
 
 PacketWriter APB_CreatePacketWriter(
-    MemoryPool memPool,
-    ObjectPool objPool);
+    APTR ctx);
 
 VOID      APB_DestroyPacketWriter(
     PacketWriter packetWriter);

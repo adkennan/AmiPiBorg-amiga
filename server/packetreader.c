@@ -1,10 +1,12 @@
 
 #include "packetreader.h"
 #include "buffer.h"
-#include "stats.h"
-#include "memory.h"
 #include "protocol.h"
-#include "log.h"
+#include "objtype.h"
+
+#include "amipiborg.h"
+#include "amipiborg_protos.h"
+#include "amipiborg_pragmas.h"
 
 #include <clib/exec_protos.h>
 #include <clib/alib_protos.h>
@@ -12,8 +14,7 @@
 #include <stdio.h>
 
 struct PacketReader {
-    MemoryPool pr_MemPool;
-    ObjectPool pr_ObjPool;
+    APTR      pr_Ctx;
     struct InBuffer *pr_InBuf;
     struct MinList pr_Queue;
     UWORD     pr_QueueSize;
@@ -36,28 +37,26 @@ struct InBuffer {
 // Packet Reader
 
 PacketReader APB_CreatePacketReader(
-    MemoryPool memPool,
-    ObjectPool objPool)
+    APTR ctx)
 {
     struct PacketReader *pr;
 
-    if(!(pr = APB_AllocMem(memPool, sizeof(struct PacketReader)))) {
-        LOG0(LOG_ERROR, "Unable to allocate memory for PacketReader");
+    if(!(pr = APB_AllocMem(ctx, sizeof(struct PacketReader)))) {
+        LOG0(ctx, LOG_ERROR, "Unable to allocate memory for PacketReader");
         return NULL;
     }
 
-    pr->pr_MemPool = memPool;
-    pr->pr_ObjPool = objPool;
+    pr->pr_Ctx = ctx;
     pr->pr_InBuf = NULL;
     pr->pr_QueueSize = 0;
     NewList(PR_QUEUE(pr));
 
-    if(!APB_TypeRegistered(objPool, OT_IN_BUFFER)) {
-        APB_RegisterObjectType(objPool, OT_IN_BUFFER, sizeof(struct InBuffer), MIN_BUFFERS, MAX_BUFFERS);
+    if(!APB_TypeRegistered(ctx, OT_IN_BUFFER)) {
+        APB_RegisterObjectType(ctx, OT_IN_BUFFER, "Incoming Buffer", sizeof(struct InBuffer), MIN_BUFFERS, MAX_BUFFERS);
     }
 
-    if(!APB_TypeRegistered(objPool, OT_IN_PACKET)) {
-        APB_RegisterObjectType(objPool, OT_IN_PACKET, sizeof(struct InPacket), MIN_BUFFERS * 10, MAX_BUFFERS * 10);
+    if(!APB_TypeRegistered(ctx, OT_IN_PACKET)) {
+        APB_RegisterObjectType(ctx, OT_IN_PACKET, "Incoming Packet", sizeof(struct InPacket), MIN_BUFFERS * 10, MAX_BUFFERS * 10);
     }
 
     return pr;
@@ -66,13 +65,13 @@ PacketReader APB_CreatePacketReader(
 VOID APB_ReleaseInBuffer(
     struct InBuffer * ib)
 {
-    LOG1(LOG_TRACE, "Release InBuffer 0x%x", ib);
+    LOG1(ib->ib_Reader->pr_Ctx, LOG_TRACE, "Release InBuffer 0x%x", ib);
 
     APB_ReleaseBuffer(ib->ib_Buf);
 
-    APB_FreeObject(ib->ib_Reader->pr_ObjPool, OT_IN_BUFFER, ib);
+    APB_FreeObject(ib->ib_Reader->pr_Ctx, OT_IN_BUFFER, ib);
 
-    APB_IncrementStat(ST_IB_ALLOCATED, -1);
+//    APB_IncrementStat(ST_IB_ALLOCATED, -1);
 }
 
 VOID APB_DestroyPacketReader(
@@ -81,7 +80,7 @@ VOID APB_DestroyPacketReader(
     struct PacketReader *pr = (struct PacketReader *) packetReader;
     struct InBuffer *ib = pr->pr_InBuf;
 
-    LOG0(LOG_TRACE, "Destroy PacketReader");
+    LOG0(pr->pr_Ctx, LOG_TRACE, "Destroy PacketReader");
 
     while(ib != NULL) {
         ib = ib->ib_Next;
@@ -93,7 +92,7 @@ VOID APB_DestroyPacketReader(
         APB_ReleaseInPacket(APB_DequeueInPacket(packetReader));
     }
 
-    APB_FreeMem(pr->pr_MemPool, pr, sizeof(struct PacketReader));
+    APB_FreeMem(pr->pr_Ctx, pr, sizeof(struct PacketReader));
 }
 
 BOOL APB_AppendBuffer(
@@ -115,16 +114,16 @@ BOOL APB_AppendBuffer(
 
     if(createNew) {
 
-        if(!(ib = (struct InBuffer *) APB_AllocObject(pr->pr_ObjPool, OT_IN_BUFFER))) {
+        if(!(ib = (struct InBuffer *) APB_AllocObject(pr->pr_Ctx, OT_IN_BUFFER))) {
 
-            APB_IncrementStat(ST_IB_ALLOC_FAILURES, 1);
+//            APB_IncrementStat(ST_IB_ALLOC_FAILURES, 1);
             return FALSE;
 
         } else {
 
-            LOG1(LOG_TRACE, "Allocated InBuffer 0x%x", ib);
+            LOG1(pr->pr_Ctx, LOG_TRACE, "Allocated InBuffer 0x%x", ib);
 
-            APB_IncrementStat(ST_IB_ALLOCATED, 1);
+//            APB_IncrementStat(ST_IB_ALLOCATED, 1);
             ib->ib_Next = NULL;
             ib->ib_Reader = pr;
             ib->ib_Buf = buf;
@@ -209,12 +208,12 @@ VOID APB_ProcessBuffer(
         }
 
         if(p.pac_Id != PACKET_ID) {
-            LOG1(LOG_ERROR, "Invalid packet id %x", p.pac_Id);
+            LOG1(pr->pr_Ctx, LOG_ERROR, "Invalid packet id %x", p.pac_Id);
             goto badData;
         }
 
         if(p.pac_Length > BUFFER_SIZE) {
-            LOG1(LOG_ERROR, "Invalid packet length %d", p.pac_Length);
+            LOG1(pr->pr_Ctx, LOG_ERROR, "Invalid packet length %d", p.pac_Length);
             goto badData;
         }
 
@@ -242,7 +241,7 @@ VOID APB_ProcessBuffer(
                     dataLen1 = p.pac_Length;
                     consumed = p.pac_Length;
 
-                    APB_IncrementStat(ST_IP_SPLIT_COUNT, 1);
+//                    APB_IncrementStat(ST_IP_SPLIT_COUNT, 1);
 
                 } else if(bc - sizeof(struct Packet) < dl) {
 
@@ -265,8 +264,7 @@ VOID APB_ProcessBuffer(
                     if(BUF_BYTES(ib2) < dataLen2 + oddSize) {
                         break;
                     }
-
-                    APB_IncrementStat(ST_IP_SPLIT_COUNT, 1);
+//                    APB_IncrementStat(ST_IP_SPLIT_COUNT, 1);
 
                 } else {
 
@@ -285,7 +283,7 @@ VOID APB_ProcessBuffer(
                 dataLen1 = p.pac_Length;
                 consumed += dataLen1;
 
-                APB_IncrementStat(ST_IP_SPLIT_COUNT, 1);
+//                APB_IncrementStat(ST_IP_SPLIT_COUNT, 1);
             }
         }
 
@@ -302,16 +300,15 @@ VOID APB_ProcessBuffer(
         }
 
         if(APB_CompleteChecksum(sum) != 0xFFFF) {
-            LOG1(LOG_ERROR, "Invalid checksum, %x", APB_CompleteChecksum(sum));
+            LOG1(pr->pr_Ctx, LOG_ERROR, "Invalid checksum, %x", APB_CompleteChecksum(sum));
             goto badData;
         }
 
-        if(!(ip = APB_AllocObject(pr->pr_ObjPool, OT_IN_PACKET))) {
-            APB_IncrementStat(ST_IP_ALLOC_FAILURES, 1);
+        if(!(ip = APB_AllocObject(pr->pr_Ctx, OT_IN_PACKET))) {
+//            APB_IncrementStat(ST_IP_ALLOC_FAILURES, 1);
             break;
         }
-
-        APB_IncrementStat(ST_IP_ALLOCATED, 1);
+//        APB_IncrementStat(ST_IP_ALLOCATED, 1);
 
         ip->ip_InBuf = ib1;
         ip->ip_Type = p.pac_Type;
@@ -324,7 +321,7 @@ VOID APB_ProcessBuffer(
         ip->ip_Data2 = data2;
         ip->ip_Offset = 0;
 
-        LOG2(LOG_TRACE, "InPacket id = %d, data length = %d", p.pac_PackId, dataLen1 + dataLen2);
+        LOG2(pr->pr_Ctx, LOG_TRACE, "InPacket id = %d, data length = %d", p.pac_PackId, dataLen1 + dataLen2);
 
         AddTail(PR_QUEUE(pr), (struct Node *) ip);
         pr->pr_QueueSize++;
@@ -339,13 +336,13 @@ VOID APB_ProcessBuffer(
             pr->pr_InBuf = ib1;
         }
 
-        APB_IncrementStat(ST_Q_INCOMING_SIZE, 1);
+//        APB_IncrementStat(ST_Q_INCOMING_SIZE, 1);
 
         consumed += oddSize;
 
         ib1->ib_Offset += consumed;
 
-        APB_IncrementStat(ST_BYTES_RECEIVED, consumed);
+//        APB_IncrementStat(ST_BYTES_RECEIVED, consumed);
 
         if(ib1->ib_Offset == BUFFER_SIZE) {
             ib1 = ib1->ib_Next;
@@ -364,11 +361,10 @@ VOID APB_ProcessBuffer(
         } else if(BUF_BYTES(ib1) == BUFFER_SIZE && ib1->ib_Next) {
             pr->pr_InBuf = ib1->ib_Next;
         }
-
-        APB_IncrementStat(ST_IP_INVALID_DATA, 1);
+//        APB_IncrementStat(ST_IP_INVALID_DATA, 1);
 
         if(BUF_BYTES(ib1) > BUFFER_SIZE) {
-            LOG3(LOG_ERROR, "InBuffer 0x%x, %d bytes greater than max of %d", ib1, BUF_BYTES(ib1), BUFFER_SIZE);
+            LOG3(pr->pr_Ctx, LOG_ERROR, "InBuffer 0x%x, %d bytes greater than max of %d", ib1, BUF_BYTES(ib1), BUFFER_SIZE);
             break;
         }
 
@@ -381,9 +377,9 @@ VOID APB_ReleaseInPacket(
 {
     struct InBuffer *ib = ip->ip_InBuf;
 
-    LOG1(LOG_TRACE, "Release InPacket 0x%x", ip);
+    LOG1(ib->ib_Reader->pr_Ctx, LOG_TRACE, "Release InPacket 0x%x", ip);
 
-    APB_FreeObject(ib->ib_Reader->pr_ObjPool, OT_IN_PACKET, ip);
+    APB_FreeObject(ib->ib_Reader->pr_Ctx, OT_IN_PACKET, ip);
 
     ib->ib_PacketCount--;
     if(ib->ib_PacketCount == 0 && ib->ib_CanRelease) {
@@ -396,8 +392,7 @@ VOID APB_ReleaseInPacket(
             APB_ReleaseInBuffer(ib);
         }
     }
-
-    APB_IncrementStat(ST_IP_ALLOCATED, -1);
+//    APB_IncrementStat(ST_IP_ALLOCATED, -1);
 }
 
 UWORD APB_ReaderQueueSize(
@@ -417,8 +412,8 @@ struct InPacket *APB_DequeueInPacket(
     }
 
     pr->pr_QueueSize--;
-    APB_IncrementStat(ST_Q_INCOMING_SIZE, -1);
-    APB_IncrementStat(ST_PAC_RECEIVED, 1);
+//    APB_IncrementStat(ST_Q_INCOMING_SIZE, -1);
+//    APB_IncrementStat(ST_PAC_RECEIVED, 1);
 
     return (struct InPacket *) RemHead(PR_QUEUE(pr));
 }

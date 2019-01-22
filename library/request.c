@@ -9,13 +9,18 @@ struct APBRequest *__asm __saveds APB_AllocRequest(
     struct Connection *conn = (struct Connection *) connection;
     struct RequestInt *req;
 
-    if(req = (struct RequestInt *) APB_AllocMem(conn->c_MemPool, sizeof(struct RequestInt))) {
+    if(req = (struct RequestInt *) APB_AllocObjectInternal(conn->c_Ctx->ctx_ObjPool, OT_REQUEST)) {
 
         req->r_Req.r_Msg.mn_ReplyPort = conn->c_MsgPort;
         req->r_Req.r_Msg.mn_Length = sizeof(struct RequestInt);
         req->r_Req.r_ConnId = conn->c_ConnId;
         req->r_Conn = conn;
+
+        LOGI1(conn->c_Ctx->ctx_Logger, LOG_TRACE, "Create Request %x", req);
+    } else {
+        LOGI0(conn->c_Ctx->ctx_Logger, LOG_ERROR, "Failed to create Request");
     }
+
 
     return (struct APBRequest *) req;
 }
@@ -25,5 +30,7 @@ VOID __asm __saveds APB_FreeRequest(
 {
     struct RequestInt *ri = (struct RequestInt *) request;
 
-    APB_FreeMem(ri->r_Conn->c_MemPool, ri, sizeof(struct RequestInt));
+    LOGI1(ri->r_Conn->c_Ctx->ctx_Logger, LOG_TRACE, "Free Request %x", ri);
+
+    APB_FreeObjectInternal(ri->r_Conn->c_Ctx->ctx_ObjPool, OT_REQUEST, ri);
 }

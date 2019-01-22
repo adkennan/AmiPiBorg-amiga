@@ -18,6 +18,7 @@
 
 #include <clib/exec_protos.h>
 #include <clib/alib_protos.h>
+#include <clib/dos_protos.h>
 #include <clib/utility_protos.h>
 #include <clib/intuition_protos.h>
 
@@ -32,7 +33,7 @@ struct Library *IntuitionBase;
 
 struct InputMsg {
     UWORD     im_EventType;
-    UWORD     im_Data;
+    ULONG     im_Data;
 };
 
 struct MsgConfig {
@@ -50,25 +51,70 @@ struct MsgMouseBtnEvent {
     UWORD     me_Button;
 };
 
+struct MsgKeyEvent {
+    UWORD     ke_EventType;
+    UWORD     ke_Key;
+    UWORD     ke_Qualifier;
+};
+
+#define ARG_TEMPLATE "L=LOGLEVEL/K"
+
+WORD GetLogLevel(
+    VOID)
+{
+    struct RDArgs *rd;
+    WORD      logLevel = -1;
+
+    LONG      argArr[] = {
+        (LONG) "E"
+    };
+
+    if(!(rd = ReadArgs(ARG_TEMPLATE, argArr, NULL))) {
+        printf("Invalid Log Level. Valid values are E, I, D or T.\n\nFormat: ");
+        printf(ARG_TEMPLATE);
+        printf("\n");
+
+        goto done;
+    }
+
+    logLevel = APB_GetLogLevel((STRPTR) argArr[0]);
+
+  done:
+    if(rd) {
+        FreeArgs(rd);
+    }
+
+    return logLevel;
+}
+
+
 int main(
     int argc,
     char **argv)
 {
+    APTR      ctx;
     APTR      conn;
     struct APBRequest *reader;
     struct APBRequest *writer;
     struct MsgPort *port;
     struct Message *msg;
     ULONG     sig;
-    UWORD     eventType = EV_MOUSEMOVE | EV_MOUSEBTN;
+    UWORD     eventType = EV_MOUSEMOVE | EV_MOUSEBTN | EV_KEYBOARD;
     struct InputMsg ev;
     struct MsgMouseMoveEvent *evMM;
     struct MsgMouseBtnEvent *evMB;
+    struct MsgKeyEvent *evK;
     BOOL      running = TRUE;
     struct IOStdReq *ioReq;
     struct InputEvent inputEv;
     struct IEPointerPixel ptr;
     struct Screen *screen;
+
+    WORD      logLevel = GetLogLevel();
+
+    if(logLevel < 0) {
+        return;
+    }
 
     if(port = CreatePort(NULL, 0)) {
 
@@ -80,126 +126,147 @@ int main(
 
                     if(AmiPiBorgBase = OpenLibrary(APB_LibName, 1)) {
 
-                        if(conn = APB_AllocConnection(port, HANDLER_ID, NULL)) {
+                        if(ctx = APB_CreateContext(NULL, Output(), logLevel)) {
 
-                            if(reader = APB_AllocRequest(conn)) {
+                            if(conn = APB_AllocConnection(ctx, port, HANDLER_ID)) {
 
-                                if(writer = APB_AllocRequest(conn)) {
+                                if(reader = APB_AllocRequest(conn)) {
 
-                                    if(APB_OpenConnection(conn)) {
+                                    if(writer = APB_AllocRequest(conn)) {
 
-                                        reader->r_Length = sizeof(struct InputMsg);
-                                        reader->r_Data = &ev;
-                                        reader->r_Timeout = 5;
+                                        if(APB_OpenConnection(conn)) {
 
-                                        writer->r_Length = 2;
-                                        writer->r_Data = &eventType;
-                                        writer->r_Timeout = 5;
+                                            reader->r_Length = sizeof(struct InputMsg);
+                                            reader->r_Data = &ev;
+                                            reader->r_Timeout = 5;
 
-                                        inputEv.ie_EventAddress = (APTR) & ptr;
-                                        inputEv.ie_NextEvent = NULL;
-                                        inputEv.ie_Class = IECLASS_NEWPOINTERPOS;
-                                        inputEv.ie_SubClass = IESUBCLASS_PIXEL;
-                                        inputEv.ie_Code = 0;
-                                        inputEv.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE;
+                                            writer->r_Length = 2;
+                                            writer->r_Data = &eventType;
+                                            writer->r_Timeout = 5;
 
-                                        ioReq->io_Data = (APTR) & inputEv;
-                                        ioReq->io_Length = sizeof(struct InputEvent);
-                                        ioReq->io_Command = IND_WRITEEVENT;
+                                            inputEv.ie_EventAddress = (APTR) & ptr;
+                                            inputEv.ie_NextEvent = NULL;
+                                            inputEv.ie_Class = IECLASS_NEWPOINTERPOS;
+                                            inputEv.ie_SubClass = IESUBCLASS_PIXEL;
+                                            inputEv.ie_Code = 0;
+                                            inputEv.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE;
 
-                                        inputEv.ie_NextEvent = NULL;
+                                            ioReq->io_Data = (APTR) & inputEv;
+                                            ioReq->io_Length = sizeof(struct InputEvent);
+                                            ioReq->io_Command = IND_WRITEEVENT;
 
-                                        APB_Write(writer);
+                                            inputEv.ie_NextEvent = NULL;
 
-                                        while(running) {
+                                            APB_Write(writer);
 
-                                            sig = Wait((1 << port->mp_SigBit) | SIGBREAKF_CTRL_C);
+                                            while(running) {
 
-                                            while(msg = GetMsg(port)) {
+                                                sig = Wait((1 << port->mp_SigBit) | SIGBREAKF_CTRL_C);
 
-                                                if(msg == (struct Message *) reader) {
+                                                while(msg = GetMsg(port)) {
 
-                                                    if(reader->r_State == APB_RS_OK) {
+                                                    if(msg == (struct Message *) reader) {
 
-                                                        switch (ev.im_EventType) {
-                                                        case EV_MOUSEMOVE:
-                                                            if(screen = LockPubScreen(NULL)) {
-                                                                evMM = (struct MsgMouseMoveEvent *) &ev;
-                                                                inputEv.ie_EventAddress = (APTR) & ptr;
-                                                                inputEv.ie_NextEvent = NULL;
-                                                                inputEv.ie_Class = IECLASS_NEWPOINTERPOS;
-                                                                inputEv.ie_SubClass = IESUBCLASS_PIXEL;
-                                                                inputEv.ie_Code = 0;
-                                                                inputEv.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE;
+                                                        if(reader->r_State == APB_RS_OK) {
 
-                                                                ptr.iepp_Screen = screen;
-                                                                ptr.iepp_Position.X = evMM->me_DeltaX;
-                                                                ptr.iepp_Position.Y = evMM->me_DeltaY;
+                                                            switch (ev.im_EventType) {
+                                                            case EV_MOUSEMOVE:
+                                                                if(screen = LockPubScreen(NULL)) {
+                                                                    evMM = (struct MsgMouseMoveEvent *) &ev;
+                                                                    inputEv.ie_EventAddress = (APTR) & ptr;
+                                                                    inputEv.ie_NextEvent = NULL;
+                                                                    inputEv.ie_Class = IECLASS_NEWPOINTERPOS;
+                                                                    inputEv.ie_SubClass = IESUBCLASS_PIXEL;
+                                                                    inputEv.ie_Code = 0;
+                                                                    inputEv.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE;
 
-                                                                DoIO((struct IORequest *) ioReq);
+                                                                    ptr.iepp_Screen = screen;
+                                                                    ptr.iepp_Position.X = evMM->me_DeltaX;
+                                                                    ptr.iepp_Position.Y = evMM->me_DeltaY;
 
-                                                                UnlockPubScreen(NULL, screen);
+                                                                    DoIO((struct IORequest *) ioReq);
+
+                                                                    UnlockPubScreen(NULL, screen);
+                                                                }
+                                                                break;
+
+                                                            case EV_MOUSEBTN:
+                                                                if(screen = LockPubScreen(NULL)) {
+                                                                    evMB = (struct MsgMouseBtnEvent *) &ev;
+
+                                                                    inputEv.ie_EventAddress = NULL;
+                                                                    inputEv.ie_Class = IECLASS_RAWMOUSE;
+                                                                    inputEv.ie_SubClass = 0;
+                                                                    inputEv.ie_Code = evMB->me_Button;
+                                                                    inputEv.ie_Qualifier = 0;
+
+                                                                    DoIO((struct IORequest *) ioReq);
+
+                                                                    UnlockPubScreen(NULL, screen);
+                                                                }
+                                                                break;
+
+                                                            case EV_KEYBOARD:
+
+                                                                if(screen = LockPubScreen(NULL)) {
+                                                                    evK = (struct MsgKeyEvent *) &ev;
+
+                                                                    inputEv.ie_EventAddress = NULL;
+                                                                    inputEv.ie_Class = IECLASS_RAWKEY;
+                                                                    inputEv.ie_SubClass = 0;
+                                                                    inputEv.ie_Code = evK->ke_Key;
+                                                                    inputEv.ie_Qualifier = evK->ke_Qualifier;
+
+                                                                    DoIO((struct IORequest *) ioReq);
+
+                                                                    UnlockPubScreen(NULL, screen);
+                                                                }
+                                                                break;
                                                             }
+
+                                                        } else if(reader->r_State != APB_RS_TIMEOUT) {
+                                                            printf("Read error: %d\n", reader->r_State);
+                                                            running = FALSE;
                                                             break;
-
-                                                        case EV_MOUSEBTN:
-                                                            if(screen = LockPubScreen(NULL)) {
-                                                                evMB = (struct MsgMouseBtnEvent *) &ev;
-
-                                                                inputEv.ie_EventAddress = NULL;
-                                                                inputEv.ie_Class = IECLASS_RAWMOUSE;
-                                                                inputEv.ie_SubClass = 0;
-                                                                inputEv.ie_Code = evMB->me_Button;
-                                                                inputEv.ie_Qualifier = 0;
-
-                                                                DoIO((struct IORequest *) ioReq);
-
-                                                                UnlockPubScreen(NULL, screen);
-                                                            }
-                                                            break;
-
                                                         }
-                                                    } else if(reader->r_State != APB_RS_TIMEOUT) {
-                                                        printf("Read error: %d\n", reader->r_State);
-                                                        running = FALSE;
-                                                        break;
+
+                                                        APB_Read(reader);
+
+                                                    } else if(msg == (struct Message *) writer) {
+
+                                                        if(writer->r_State != APB_RS_OK) {
+                                                            printf("Unable to configure remote: %d\n", writer->r_State);
+                                                            running = FALSE;
+                                                            break;
+                                                        }
+
+                                                        APB_Read(reader);
+
+                                                    } else {
+
+                                                        ReplyMsg(msg);
                                                     }
+                                                }
 
-                                                    APB_Read(reader);
-
-                                                } else if(msg == (struct Message *) writer) {
-
-                                                    if(writer->r_State != APB_RS_OK) {
-                                                        printf("Unable to configure remote: %d\n", writer->r_State);
-                                                        running = FALSE;
-                                                        break;
-                                                    }
-
-                                                    APB_Read(reader);
-
-                                                } else {
-
-                                                    ReplyMsg(msg);
+                                                if(sig & SIGBREAKF_CTRL_C) {
+                                                    break;
                                                 }
                                             }
 
-                                            if(sig & SIGBREAKF_CTRL_C) {
-                                                break;
-                                            }
+                                            APB_CloseConnection(conn);
                                         }
 
-                                        APB_CloseConnection(conn);
-                                    } else {
-                                        printf("Failed to connect: %d\n", APB_ConnectionState(conn));
+                                        APB_FreeRequest(writer);
                                     }
 
-                                    APB_FreeRequest(writer);
+                                    APB_FreeRequest(reader);
                                 }
 
-                                APB_FreeRequest(reader);
+                                APB_FreeConnection(conn);
+
                             }
 
-                            APB_FreeConnection(conn);
+                            APB_FreeContext(ctx);
                         }
 
                         CloseLibrary(AmiPiBorgBase);
@@ -208,12 +275,12 @@ int main(
                     CloseLibrary(IntuitionBase);
                 }
 
-
                 CloseDevice((struct IORequest *) ioReq);
             }
 
             DeleteIORequest(ioReq);
         }
+
         DeletePort(port);
     }
 }

@@ -12,6 +12,16 @@
 
 #include "amipiborg.h"
 
+#define MAX_NAME_LEN 31
+#define MAX_WRITE_LEN 512
+
+enum {
+    OT_VOLUME = 0x1122,
+    OT_REQUEST_MIN = 0x1123,
+    OT_REQUEST_MAX = 0x1124,
+    OT_LOCK = 0x1125
+};
+
 enum DeviceState
 {
     ST_STARTING,
@@ -21,19 +31,11 @@ enum DeviceState
     ST_STOPPING
 };
 
-struct Volume
-{
-    struct MinNode v_Node;
-    STRPTR v_Name;
-    struct MsgPort *v_Port;
-    struct DeviceList *v_Vol;
-    struct MinList v_Locks;
-    UWORD v_Id;
-};
-
 struct ApbFs
 {
+    APTR fs_Ctx;
     APTR fs_Conn;
+    APTR fs_MP;
     struct MsgPort *fs_RemotePort;
 	struct APBRequest *fs_Reader;
 	struct APBRequest *fs_Writer;
@@ -44,6 +46,18 @@ struct ApbFs
     UWORD fs_Status;
     ULONG fs_VolSigBits;
 	BOOL fs_WriteReady;
+};
+
+struct Volume
+{
+    struct MinNode v_Node;
+    struct ApbFs *v_Fs;
+    STRPTR v_Name;
+	struct MsgPort *v_Port;
+    struct DeviceList *v_Vol;
+    UWORD v_Id;
+	WORD v_LockCount;
+    BOOL v_Mounted;
 };
 
 struct FsRequest
@@ -69,12 +83,26 @@ struct FsResponse
 	UWORD r_Length;
 };
 
-#define NEW_VOLUME_KEY 0xFFFFFFFF
-
-struct FsNewVolume
+struct FsFileLock
 {
-    ULONG nv_Key;
-    UWORD nv_VolId;
+    struct FileLock fl_RealLock;
+    UWORD fl_Magic;
+};
+
+#define MOUNT_VOLUME_KEY 0xFFFFFFFF
+#define UNMOUNT_VOLUME_KEY 0xFFFFFFFE
+
+struct FsMountVolume
+{
+    ULONG mv_Key;
+    UWORD mv_VolId;
+	BYTE mv_Name;
+};
+
+struct FsUnmountVolume 
+{
+	ULONG uv_Key;
+	UWORD uv_VolId;
 };
 
 struct FsRequest *FS_AllocRequest(struct Volume *vol, struct DosPacket *pkt, UWORD type, UWORD length);
@@ -83,21 +111,25 @@ VOID FS_AppendArg(struct FsRequest *req, UWORD arg, UWORD length, APTR data);
 
 VOID FS_FreeRequest(struct FsRequest *req);
 
-struct Volume *FS_CreateVolume(UWORD id, STRPTR name);
+struct Volume *FS_CreateVolume(struct ApbFs *fs, UWORD id, STRPTR name);
 
 VOID FS_FreeVolume(struct Volume *vol);
 
-VOID FS_ReceiveDosMessage(struct ApbFs *fs, struct Volume *vol);
+BOOL FS_MountVolume(struct Volume *vol);
 
-VOID FS_ReceiveRemoteMessage(struct ApbFs *fs, struct Volume *vol, struct FsResponse *res);
+VOID FS_UnmountVolume(struct Volume *vol);
+
+VOID FS_ReceiveDosMessage(struct Volume *vol);
+
+VOID FS_ReceiveRemoteMessage(struct Volume *vol, struct FsResponse *res);
 
 VOID FS_EnqueueRequest(struct ApbFs *fs, struct FsRequest *req);
 
 struct ApbFs *FS_CreateDevice(VOID);
 
-VOID FS_FreeDevice(struct ApbFs *device);
+VOID FS_FreeDevice(struct ApbFs *fs);
 
-VOID FS_Run(struct ApbFs *device);
+VOID FS_Run(struct ApbFs *fs);
 
 
 #endif // __APBFS_H__

@@ -4,8 +4,6 @@
 #include <exec/types.h>
 #include <exec/lists.h>
 
-#include "objectpool.h"
-
 #define BUFFER_SIZE 4096
 
 #define MIN_BUFFERS 8
@@ -13,7 +11,7 @@
 
 struct Buffer {
     struct MinNode b_Node;
-    ObjectPool b_ObjPool;
+    APTR      b_Ctx;
     UWORD     b_Offset;
     UBYTE     b_Data[BUFFER_SIZE];
 };
@@ -25,7 +23,7 @@ struct Buffer {
 #define BUF_NODE(buf) ((struct Node *)&buf->b_Node)
 
 struct Buffer *APB_AllocateBuffer(
-    ObjectPool objPool);
+    APTR ctx);
 
 VOID      APB_ReleaseBuffer(
     struct Buffer *buf);

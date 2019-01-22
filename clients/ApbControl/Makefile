@@ -1,33 +1,19 @@
 
-DIR=		//bin/
-
 EXENAME=	ApbControl
-EXEPATH=	$(DIR)
 
-INC=		INCLUDEDIRECTORY=//include
+LIBS=		$(LIBS) $(ROOT)obj/apb.lib
 
-COMPILER=	SC:c/sc
-LINKER=		SC:c/slink
-
-LIBS=		LIB:sc.lib LIB:amiga.lib
-
-CPU=		68030
-
-C_OPTS=		noicons cpu=$(CPU) $(INC)
-
-C_SOURCES=	apbcontrol.c 
+SCFLAGS=$(EXEFLAGS) CPU=$(CPU) $(DEF_LOGGING) $(DEF_DEBUG) INCLUDEDIRECTORY=$(ROOT)$(INC)
 
 OBJECTS=	apbcontrol.o
 
 $(EXENAME): $(OBJECTS)
-   $(LINKER) WITH <<
- TO $(EXEPATH)$(EXENAME)
+   $(LD) WITH <<
+ TO $(ROOT)$(OUTDIR)$(EXENAME)
  FROM LIB:c.o $(OBJECTS)
  LIBRARY $(LIBS) NOICONS ADDSYM
 <
-.c.o:
-	$(COMPILER) $(C_OPTS) $*.c
 
 clean:
 	@Delete $(OBJECTS)
-	@Delete $(EXEPATH)$(EXENAME) 
+	@Delete $(ROOT)$(OUTDIR)$(EXENAME) 

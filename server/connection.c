@@ -1,12 +1,11 @@
 
 #include "connection.h"
 #include "protocol.h"
-#include "memory.h"
-#include "stats.h"
-#include "log.h"
-#include "event.h"
+#include "objtype.h"
 
 #include "amipiborg.h"
+#include "amipiborg_protos.h"
+#include "amipiborg_pragmas.h"
 
 #include <exec/lists.h>
 
@@ -18,9 +17,8 @@
 struct Connection {
 
     struct MinNode cnn_Node;
-    ObjectPool cnn_ObjectPool;
+    APTR      cnn_Ctx;
     PacketWriter cnn_PacketWriter;
-    EventBroker cnn_EventBroker;
     struct MinList cnn_PacketQueue;
     struct MinList cnn_EventQueue;
     struct MinList cnn_ReqQueue;
@@ -44,9 +42,10 @@ VOID APB_CnnConnect(
 {
     struct PacketConnect *p;
 
-    LOG1(LOG_DEBUG, "Send Connect %d", c->cnn_Id);
+    LOG1(c->cnn_Ctx, LOG_DEBUG, "Send Connect %d", c->cnn_Id);
 
     if(!(p = (struct PacketConnect *) APB_AllocPacket(c->cnn_PacketWriter, sizeof(struct PacketConnect)))) {
+        LOG0(c->cnn_Ctx, LOG_ERROR, "Failed to allocate packet\n");
         return;
     }
 
@@ -62,10 +61,10 @@ VOID APB_CnnDisconnect(
 {
     struct Packet *p;
 
-    LOG1(LOG_DEBUG, "Send Disconnect %d", c->cnn_Id);
+    LOG1(c->cnn_Ctx, LOG_DEBUG, "Send Disconnect %d", c->cnn_Id);
 
     if(!(p = APB_AllocPacket(c->cnn_PacketWriter, sizeof(struct Packet)))) {
-        printf("Failed to allocate packet\n");
+        LOG0(c->cnn_Ctx, LOG_ERROR, "Failed to allocate packet\n");
         return;
     }
 
@@ -76,27 +75,28 @@ VOID APB_CnnDisconnect(
 }
 
 Connection APB_CreateConnection(
+    APTR ctx,
     struct List * cnns,
-    ObjectPool objectPool,
     UWORD connId,
     PacketWriter packetWriter)
 {
     struct Connection *c;
 
-    if(!APB_TypeRegistered(objectPool, OT_CONNECTION)) {
-        APB_RegisterObjectType(objectPool, OT_CONNECTION, sizeof(struct Connection), 5, 1000);
+    if(!APB_TypeRegistered(ctx, OT_CONNECTION)) {
+        APB_RegisterObjectType(ctx, OT_CONNECTION, "Connection", sizeof(struct Connection), 5, 1000);
     }
 
-    if(!(c = APB_AllocObject(objectPool, OT_CONNECTION))) {
+    if(!(c = APB_AllocObject(ctx, OT_CONNECTION))) {
+        LOG0(ctx, LOG_ERROR, "Failed to allocate connection\n");
         return NULL;
     }
 
-    LOG1(LOG_DEBUG, "Create Connection %d", connId);
+    LOG1(ctx, LOG_DEBUG, "Create Connection %d", connId);
 
-    APB_IncrementStat(ST_CNN_CREATED, 1);
-    APB_IncrementStat(ST_CNN_CURRENT, 1);
+//    APB_IncrementStat(ST_CNN_CREATED, 1);
+//    APB_IncrementStat(ST_CNN_CURRENT, 1);
 
-    c->cnn_ObjectPool = objectPool;
+    c->cnn_Ctx = ctx;
     c->cnn_PacketWriter = packetWriter;
     c->cnn_Id = connId;
     c->cnn_HandlerId = 0;
@@ -115,7 +115,7 @@ VOID APB_DestroyConnection(
     struct Connection *c = (struct Connection *) cnn;
     struct InPacket *ip;
 
-    LOG1(LOG_DEBUG, "Destroy Connect %d", c->cnn_Id);
+    LOG1(c->cnn_Ctx, LOG_DEBUG, "Destroy Connect %d", c->cnn_Id);
 
     if(c->cnn_State < CS_DISCONNECTING) {
         APB_CnnDisconnect(c);
@@ -128,9 +128,9 @@ VOID APB_DestroyConnection(
 
     Remove((struct Node *) c);
 
-    APB_FreeObject(c->cnn_ObjectPool, OT_CONNECTION, c);
+    APB_FreeObject(c->cnn_Ctx, OT_CONNECTION, c);
 
-    APB_IncrementStat(ST_CNN_CURRENT, -1);
+//    APB_IncrementStat(ST_CNN_CURRENT, -1);
 }
 
 VOID APB_PushToRemote(
@@ -142,10 +142,12 @@ VOID APB_PushToRemote(
 
     if(!(p = APB_AllocPacket(c->cnn_PacketWriter, sizeof(struct Packet) + req->r_Length))) {
 
+        LOG0(c->cnn_Ctx, LOG_ERROR, "Failed to allocate packet\n");
         req->r_State = APB_RS_FAILED;
+
     } else {
 
-        LOG2(LOG_TRACE, "Conn %d Outgoing Data Packet %d bytes", c->cnn_Id, req->r_Length);
+        LOG2(c->cnn_Ctx, LOG_TRACE, "Conn %d Outgoing Data Packet %d bytes", c->cnn_Id, req->r_Length);
 
         p->pac_ConnId = c->cnn_Id;
         p->pac_Type = PT_DATA;
@@ -180,7 +182,7 @@ VOID APB_PushToClient(
 
         if(r->r_Length < toCopy) {
 
-            LOG3(LOG_ERROR, "Conn %d Buffer of %d bytes to small to receive %d bytes", c->cnn_Id, r->r_Length, toCopy);
+            LOG3(c->cnn_Ctx, LOG_ERROR, "Conn %d Buffer of %d bytes to small to receive %d bytes", c->cnn_Id, r->r_Length, toCopy);
 
             r->r_State = APB_RS_BUFFER_TOO_SMALL;
 
@@ -188,7 +190,7 @@ VOID APB_PushToClient(
 
         } else {
 
-            LOG2(LOG_TRACE, "Conn %d Incoming Data Packet %d bytes", c->cnn_Id, toCopy);
+            LOG2(c->cnn_Ctx, LOG_TRACE, "Conn %d Incoming Data Packet %d bytes", c->cnn_Id, toCopy);
 
             APB_InPacketToBuffer(ip, r->r_Data);
 
@@ -216,31 +218,31 @@ VOID APB_HandleConnectionPacket(
     switch (ip->ip_Type) {
 
     case PT_CONNECTED:
-        LOG1(LOG_TRACE, "Conn %d Connected", c->cnn_Id);
+        LOG1(c->cnn_Ctx, LOG_TRACE, "Conn %d Connected", c->cnn_Id);
         c->cnn_State = CS_CONNECTED;
         releasePacket = TRUE;
         replyReq = TRUE;
         replyReqType = APB_RT_OPEN;
         replyReqState = APB_RS_OK;
 
-        APB_IncrementStat(ST_CNN_SUCCESSES, 1);
+//        APB_IncrementStat(ST_CNN_SUCCESSES, 1);
         break;
 
     case PT_DISCONNECTED:
-        LOG1(LOG_TRACE, "Conn %d Disconnected", c->cnn_Id);
+        LOG1(c->cnn_Ctx, LOG_TRACE, "Conn %d Disconnected", c->cnn_Id);
         c->cnn_State = CS_DISCONNECTED;
         releasePacket = TRUE;
         destroyCnn = TRUE;
         break;
 
     case PT_NO_HANDLER:
-        LOG1(LOG_ERROR, "Conn %d No Handler", c->cnn_Id);
+        LOG1(c->cnn_Ctx, LOG_ERROR, "Conn %d No Handler", c->cnn_Id);
         c->cnn_State = CS_NO_HANDLER;
         replyReq = TRUE;
         replyReqType = APB_RT_OPEN;
         replyReqState = APB_RS_NO_HANDLER;
 
-        APB_IncrementStat(ST_CNN_FAILURES, 1);
+//        APB_IncrementStat(ST_CNN_FAILURES, 1);
 
         break;
 
@@ -288,7 +290,7 @@ VOID APB_CnnCheckRequestTimeouts(
 
         if(req->ri_TimeoutTicks == 1) {
 
-            LOG2(LOG_TRACE, "Conn %d Request 0x%x Timed Out", c->cnn_Id, req);
+            LOG2(c->cnn_Ctx, LOG_TRACE, "Conn %d Request 0x%x Timed Out", c->cnn_Id, req);
 
             req->ri_Req.r_State = APB_RS_TIMEOUT;
 
@@ -321,14 +323,14 @@ VOID APB_HandleClientRequest(
     switch (req->r_Type) {
 
     case APB_RT_OPEN:
-        LOG2(LOG_TRACE, "Conn %d Open Handler %d", c->cnn_Id, req->r_HandlerId);
+        LOG2(c->cnn_Ctx, LOG_TRACE, "Conn %d Open Handler %d", c->cnn_Id, req->r_HandlerId);
         c->cnn_HandlerId = req->r_HandlerId;
         AddTail(REQ_LIST(c), (struct Node *) req);
         APB_CnnConnect(c);
         break;
 
     case APB_RT_CLOSE:
-        LOG1(LOG_TRACE, "Conn %d Close", c->cnn_Id);
+        LOG1(c->cnn_Ctx, LOG_TRACE, "Conn %d Close", c->cnn_Id);
         reply = TRUE;
         if(c->cnn_State < CS_DISCONNECTING) {
             APB_CnnDisconnect(c);
@@ -336,13 +338,13 @@ VOID APB_HandleClientRequest(
         break;
 
     case APB_RT_READ:
-        LOG1(LOG_TRACE, "Conn %d Read", c->cnn_Id);
+        LOG1(c->cnn_Ctx, LOG_TRACE, "Conn %d Read", c->cnn_Id);
         switch (c->cnn_State) {
 
         case CS_DISCONNECTING:
         case CS_DISCONNECTED:
 
-            LOG1(LOG_ERROR, "Conn %d Cannot Read while disconnecting or disconnected", c->cnn_Id);
+            LOG1(c->cnn_Ctx, LOG_ERROR, "Conn %d Cannot Read while disconnecting or disconnected", c->cnn_Id);
 
             req->r_State = APB_RS_NOT_CONNECTED;
             reply = TRUE;
@@ -350,7 +352,7 @@ VOID APB_HandleClientRequest(
 
         case CS_NO_HANDLER:
 
-            LOG1(LOG_TRACE, "Conn %d Cannot Read without a handler", c->cnn_Id);
+            LOG1(c->cnn_Ctx, LOG_TRACE, "Conn %d Cannot Read without a handler", c->cnn_Id);
 
             req->r_State = APB_RS_NO_HANDLER;
             reply = TRUE;
@@ -369,14 +371,14 @@ VOID APB_HandleClientRequest(
 
         case CS_DISCONNECTING:
         case CS_DISCONNECTED:
-            LOG1(LOG_ERROR, "Conn %d Cannot Write while disconnecting or disconnected", c->cnn_Id);
+            LOG1(c->cnn_Ctx, LOG_ERROR, "Conn %d Cannot Write while disconnecting or disconnected", c->cnn_Id);
 
             req->r_State = APB_RS_NOT_CONNECTED;
             reply = TRUE;
             break;
 
         case CS_NO_HANDLER:
-            LOG1(LOG_TRACE, "Conn %d Cannot Write without a handler", c->cnn_Id);
+            LOG1(c->cnn_Ctx, LOG_TRACE, "Conn %d Cannot Write without a handler", c->cnn_Id);
 
             req->r_State = APB_RS_NO_HANDLER;
             reply = TRUE;
@@ -390,13 +392,8 @@ VOID APB_HandleClientRequest(
         }
         break;
 
-    case APB_RT_LOG:
-        LOG2(0, "Conn %d: %s", c->cnn_Id, req->r_Data);
-        reply = TRUE;
-        break;
-
     default:
-        LOG1(LOG_ERROR, "Unknown request type %d\n", req->r_Type);
+        LOG1(c->cnn_Ctx, LOG_ERROR, "Unknown request type %d\n", req->r_Type);
         reply = TRUE;
         break;
     }
@@ -446,6 +443,5 @@ VOID APB_CheckRequestTimeouts(
     for(cnn = (struct Connection *) (cnns->lh_Head); cnn->cnn_Node.mln_Succ; cnn = (struct Connection *) cnn->cnn_Node.mln_Succ) {
 
         APB_CnnCheckRequestTimeouts(cnn);
-
     }
 }

@@ -16,6 +16,7 @@
 
 #include <clib/exec_protos.h>
 #include <clib/alib_protos.h>
+#include <clib/dos_protos.h>
 #include <clib/utility_protos.h>
 
 #define HANDLER_ID 2
@@ -23,10 +24,42 @@
 struct Library *AmiPiBorgBase;
 struct Library *UtilityBase;
 
+#define ARG_TEMPLATE "L=LOGLEVEL/K"
+#define ARGS_LEN 1
+
+WORD GetLogLevel(
+    VOID)
+{
+    struct RDArgs *rd;
+    WORD      logLevel = -1;
+
+    LONG      argArr[ARGS_LEN] = {
+        (LONG) "E"
+    };
+
+    if(!(rd = ReadArgs(ARG_TEMPLATE, argArr, NULL))) {
+        printf("Invalid Log Level. Valid values are E, I, D or T.\n\nFormat: ");
+        printf(ARG_TEMPLATE);
+        printf("\n");
+
+        goto done;
+    }
+
+    logLevel = APB_GetLogLevel((STRPTR) argArr[0]);
+
+  done:
+    if(rd) {
+        FreeArgs(rd);
+    }
+
+    return logLevel;
+}
+
 int main(
     int argc,
     char **argv)
 {
+    APTR      ctx;
     APTR      conn;
     struct APBRequest *reader;
     struct MsgPort *port;
@@ -36,45 +69,55 @@ int main(
     struct timerequest *timerIO;
     struct ClockData cd;
 
+    WORD      logLevel = GetLogLevel();
+
+    if(logLevel < 0) {
+        return;
+    }
+
     if(port = CreatePort(NULL, 0)) {
 
         if(AmiPiBorgBase = OpenLibrary(APB_LibName, 1)) {
 
-            if(conn = APB_AllocConnection(port, HANDLER_ID, NULL)) {
+            if(ctx = APB_CreateContext(NULL, Output(), logLevel)) {
 
-                if(reader = APB_AllocRequest(conn)) {
+                if(conn = APB_AllocConnection(ctx, port, HANDLER_ID)) {
 
-                    reader->r_Data = &time;
-                    reader->r_Length = sizeof(ULONG);
-                    reader->r_Timeout = 5;
+                    if(reader = APB_AllocRequest(conn)) {
 
-                    if(APB_OpenConnection(conn)) {
+                        reader->r_Data = &time;
+                        reader->r_Length = sizeof(ULONG);
+                        reader->r_Timeout = 5;
 
-                        APB_Read(reader);
+                        if(APB_OpenConnection(conn)) {
 
-                        sig = Wait((1 << port->mp_SigBit) | SIGBREAKF_CTRL_C);
+                            APB_Read(reader);
 
-                        while(msg = GetMsg(port)) {
-                            if(msg != (struct Message *) reader) {
-                                ReplyMsg(msg);
+                            sig = Wait((1 << port->mp_SigBit) | SIGBREAKF_CTRL_C);
+
+                            while(msg = GetMsg(port)) {
+                                if(msg != (struct Message *) reader) {
+                                    ReplyMsg(msg);
+                                }
                             }
+
+                            APB_CloseConnection(conn);
+                        } else {
+
+                            printf("Failed to connect: %d\n", APB_ConnectionState(conn));
                         }
 
-                        APB_CloseConnection(conn);
-                    } else {
-
-                        printf("Failed to connect: %d\n", APB_ConnectionState(conn));
+                        APB_FreeRequest(reader);
                     }
 
-                    APB_FreeRequest(reader);
+                    APB_FreeConnection(conn);
                 }
 
-                APB_FreeConnection(conn);
+                APB_FreeContext(ctx);
             }
 
             CloseLibrary(AmiPiBorgBase);
         }
-
 
         if(time == 0) {
             printf("Unabled to get updated date and time.\n");

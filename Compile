@@ -1,10 +1,13 @@
-.key HELP/S,CLEAN/S,INDENT/S
+.key HELP/S,CLEAN/S,INDENT/S,DEBUG/S,NOLOG/S,CPU/K
 
 IF <HELP$NOHELP> EQ HELP
 	ECHO "Options: "
 	ECHO "  HELP/S      Show this help message."
-	ECHO "  CLEAN/S     Remoe object files, binaries and backup files."
+	ECHO "  CLEAN/S     Remove object files, binaries and backup files."
 	ECHO "  INDENT/S    Run INDENT on all source files."
+	ECHO "  DEBUG/S     Compile with full debug symbols."
+	ECHO "  NOLOG/S     Compile without logging messages."
+	ECHO "  CPU/K       Compile for a specific CPU."
 	ECHO
 	QUIT
 ENDIF
@@ -23,7 +26,9 @@ IF <INDENT$NOINDENT> EQ INDENT
 	ECHO "Includes"
 	c:indent include/#?.h
 	ECHO "Library"
-	c:indent library/#?.h library/#?.c
+	c:indent library/#?.h library/#?.c 
+	ECHO "Link Library"
+	c:indent lib/#?.c
 	ECHO "Remotes"
 	c:indent remote/#?.c
 	ECHO "Server"
@@ -39,45 +44,89 @@ ELSE
 	ECHO "Compiling"
 ENDIF
 
+; Decide on a CPU to compile for.
+CPU CHECK 68040 >NIL:
+IF WARN 
+  CPU CHECK 68030 >NIL:
+  IF WARN
+    CPU CHECK 68020 >NIL:
+    IF WARN
+      SET defcpu 68000
+    ELSE
+      SET defcpu 68020
+    ENDIF
+  ELSE
+    SET defcpu 68030
+  ENDIF
+ELSE
+  SET defcpu 68040
+ENDIF
+
+.def CPU $defcpu
+
+ECHO Compiling for <CPU>
+ECHO " "
+
+IF <DEBUG$NODEBUG> EQ DEBUG
+  ECHO Compiling With Debug Symbols
+  ECHO " "
+  SET DEFDEBUG "DEF_DEBUG=DEBUG=FF"
+ELSE 
+  SET DEFDEBUG "DEF_DEBUG=NODEBUG"
+ENDIF
+
+IF <NOLOG$LOG> EQ NOLOG
+  ECHO Omitting Logging Messages
+  ECHO " "
+  SET DEFLOGGING "DEF_LOGGING=DEFINE=APB_NOLOG"
+ELSE
+  SET DEFLOGGING "DEF_LOGGING=DEFINE=APB_LOG"
+ENDIF
+
 ECHO "Library"
 CD library
-SMAKE <CLEAN>
+SMAKE -b /Makefile.defs ROOT=/ <CLEAN> CPU=<CPU> $DEFDEBUG $DEFLOGGING
+CD /
+
+ECHO "Link Library"
+CD lib
+SMAKE -b /Makefile.defs ROOT=/ <CLEAN> CPU=<CPU> $DEFDEBUG $DEFLOGGING
 CD /
 
 ECHO "Remotes"
 CD remote
-SMAKE <CLEAN>
+SMAKE -b /Makefile.defs ROOT=/ <CLEAN> CPU=<CPU> $DEFDEBUG $DEFLOGGING
 CD /
 
 ECHO "Server"
 CD server
-SMAKE <CLEAN>
+SMAKE -b /Makefile.defs ROOT=/ <CLEAN> CPU=<CPU> $DEFDEBUG $DEFLOGGING
 CD /
 
 ECHO "Clients"
 
 ECHO "  ApbControl"
 CD clients/ApbControl
-SMAKE <CLEAN>
+; SMAKE -b //Makefile.defs ROOT=// <CLEAN> CPU=<CPU> $DEFDEBUG $DEFLOGGING
 CD //
 
 ECHO "  ApbDate"
 CD clients/ApbDate
-SMAKE <CLEAN>
+SMAKE -b //Makefile.defs ROOT=// <CLEAN> CPU=<CPU> $DEFDEBUG $DEFLOGGING
 CD //
 
 ECHO "  ApbInput"
 CD clients/ApbInput
-SMAKE <CLEAN>
+SMAKE -b //Makefile.defs ROOT=// <CLEAN> CPU=<CPU> $DEFDEBUG $DEFLOGGING
 CD //
 
 ECHO "  ApbPing"
 CD clients/ApbPing
-SMAKE <CLEAN>
+SMAKE -b //Makefile.defs ROOT=// <CLEAN> CPU=<CPU> $DEFDEBUG $DEFLOGGING
 CD //
 
 ECHO "  ApbFs"
 CD clients/ApbFs
-SMAKE <CLEAN>
+SMAKE -b //Makefile.defs ROOT=// <CLEAN> CPU=<CPU> $DEFDEBUG $DEFLOGGING
 CD //
 

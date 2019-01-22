@@ -1,12 +1,16 @@
 
 #include "server.h"
-#include "stats.h"
+#include "amipiborg.h"
+
+#include <utility/utility.h>
 
 #include <clib/exec_protos.h>
 
 #include <stdio.h>
 
 struct Library *DosBase;
+struct Library *UtilityBase;
+struct Library *AmiPiBorgBase;
 
 void __regargs _CXBRK(
     void)
@@ -22,11 +26,27 @@ int main(
 
     if(DosBase = OpenLibrary("dos.library", 34)) {
 
-        if(srv = APB_CreateServer()) {
+        if(UtilityBase = OpenLibrary(UTILITYNAME, 37)) {
 
-            APB_Run(srv);
+            if(AmiPiBorgBase = OpenLibrary(APB_LibName, 1)) {
 
-            APB_DestroyServer(srv);
+                if(srv = APB_CreateServer()) {
+
+                    APB_Run(srv);
+
+                    APB_DestroyServer(srv);
+                }
+
+                CloseLibrary(AmiPiBorgBase);
+
+            } else {
+                printf("Can't open %s >= 1\n", APB_LibName);
+            }
+
+            CloseLibrary(UtilityBase);
+
+        } else {
+            printf("Can't open %s >= 37\n", UTILITYNAME);
         }
 
         CloseLibrary(DosBase);
