@@ -15,47 +15,50 @@
 
 #define LOCK_KEY(l) (l ? l->fl_Key : 0)
 
+#define DEV_NAME_SIZE 10
+
 struct DosList *FS_WaitForDosList(
-    VOID)
+    LONG type)
 {
     struct DosList *dl;
 
-    while(!(dl = AttemptLockDosList(LDF_VOLUMES | LDF_WRITE))) {
+    while(!(dl = AttemptLockDosList(type | LDF_WRITE))) {
         Delay(50);
     }
 
     return dl;
 }
 
-struct DeviceList *FS_RemoveDosVolume(
-    STRPTR name)
+struct DeviceList *FS_RemoveDosEntry(
+    STRPTR name,
+    LONG type)
 {
     struct DosList *dl;
     struct DeviceList *v;
 
-    dl = FS_WaitForDosList();
+    dl = FS_WaitForDosList(type);
 
-    if(v = (struct DeviceList *) FindDosEntry(dl, name, LDF_VOLUMES)) {
+    if(v = (struct DeviceList *) FindDosEntry(dl, name, type)) {
 
         RemDosEntry((struct DosList *) v);
     }
 
-    UnLockDosList(LDF_VOLUMES | LDF_WRITE);
+    UnLockDosList(type | LDF_WRITE);
 
     return v;
 }
 
-BOOL FS_AddDosVolume(
-    struct DeviceList * vol)
+BOOL FS_AddDosEntry(
+    struct DosList * obj,
+    LONG type)
 {
-    struct DosList *dl;
-    BOOL      result = FALSE;
+    BOOL      result;
 
-    dl = FS_WaitForDosList();
+    FS_WaitForDosList(type);
 
-    result = AddDosEntry((struct DosList *) vol);
+    result = AddDosEntry(obj);
 
-    UnLockDosList(LDF_VOLUMES | LDF_WRITE);
+    UnLockDosList(type | LDF_WRITE);
 
     return result;
 }
@@ -118,7 +121,7 @@ BOOL FS_MountVolume(
         vol->v_Vol->dl_Task = vol->v_Port;
         vol->v_Vol->dl_DiskType = ID_DOS_DISK;
 
-        if(FS_AddDosVolume(vol->v_Vol)) {
+        if(FS_AddDosEntry((struct DosList *) vol->v_Vol, LDF_VOLUMES)) {
 
             vol->v_LockCount = 0;
             vol->v_Mounted = TRUE;
@@ -138,12 +141,51 @@ VOID FS_UnmountVolume(
     }
 
     if(vol->v_Vol) {
-        FS_RemoveDosVolume(vol->v_Name);
+        FS_RemoveDosEntry(vol->v_Name, LDF_VOLUMES);
         FreeDosEntry((struct DosList *) vol->v_Vol);
         vol->v_Vol = NULL;
     }
 
     vol->v_Mounted = FALSE;
+}
+
+BOOL FS_CreateDosDevice(
+    struct Volume *vol)
+{
+
+    if(vol->v_DevName = APB_AllocMem(vol->v_Fs->fs_Ctx, DEV_NAME_SIZE)) {
+
+        sprintf(vol->v_DevName, "APB%d", vol->v_Id);
+
+        if((vol->v_Dev = (struct DevInfo *) MakeDosEntry(vol->v_DevName, DLT_DEVICE))) {
+
+            vol->v_Dev->dvi_Task = vol->v_Port;
+
+            if(FS_AddDosEntry((struct DosList *) vol->v_Dev, LDF_DEVICES)) {
+
+                return TRUE;
+            }
+        }
+
+        FreeDosEntry((struct DosList *) vol->v_Vol);
+    }
+
+    APB_FreeMem(vol->v_Fs->fs_Ctx, vol->v_DevName, DEV_NAME_SIZE);
+}
+
+VOID FS_FreeDosDevice(
+    struct Volume *vol)
+{
+
+    if(vol->v_Dev) {
+        FS_RemoveDosEntry(vol->v_DevName, LDF_DEVICES);
+        FreeDosEntry((struct DosList *) vol->v_Dev);
+    }
+
+    if(vol->v_DevName) {
+        APB_FreeMem(vol->v_Fs->fs_Ctx, vol->v_DevName, DEV_NAME_SIZE);
+    }
+
 }
 
 struct Volume *FS_CreateVolume(
@@ -163,8 +205,13 @@ struct Volume *FS_CreateVolume(
 
         if(vol->v_Port = CreatePort(NULL, 0)) {
 
-            if(FS_MountVolume(vol)) {
-                return vol;
+            if(FS_CreateDosDevice(vol)) {
+
+                if(FS_MountVolume(vol)) {
+                    return vol;
+                }
+
+                FS_FreeDosDevice(vol);
             }
 
             DeletePort(vol->v_Port);
@@ -179,7 +226,12 @@ struct Volume *FS_CreateVolume(
 VOID FS_FreeVolume(
     struct Volume * vol)
 {
-    FS_UnmountVolume(vol);
+    if(vol->v_Vol) {
+        FS_UnmountVolume(vol);
+        FreeDosEntry((struct DosList *) vol->v_Vol);
+    }
+
+    FS_FreeDosDevice(vol);
 
     if(vol->v_Port) {
         DeletePort(vol->v_Port);
@@ -326,10 +378,35 @@ VOID FS_ActionInfo(
     struct DosPacket *pkt)
 {
     struct FsRequest *req;
+    struct InfoData *info;
 
-    req = FS_AllocRequest(vol, pkt, ACTION_INFO, 0);
+    if(vol->v_Mounted) {
 
-    FS_EnqueueRequest(vol->v_Fs, req);
+        req = FS_AllocRequest(vol, pkt, ACTION_INFO, 0);
+
+        FS_EnqueueRequest(vol->v_Fs, req);
+
+    } else {
+
+        if(pkt->dp_Type == ACTION_DISK_INFO) {
+            info = BADDR(pkt->dp_Arg1);
+        } else {
+            info = BADDR(pkt->dp_Arg2);
+        }
+
+        info->id_NumSoftErrors = 0;
+        info->id_UnitNumber = vol->v_Id;
+        info->id_DiskState = ID_NO_DISK_PRESENT;
+        info->id_DiskType = ID_NO_DISK_PRESENT;
+        info->id_VolumeNode = NULL;
+        info->id_InUse = DOSFALSE;
+
+        info->id_BytesPerBlock = 0;
+        info->id_NumBlocks = 0;
+        info->id_NumBlocksUsed = 0;
+
+        pkt->dp_Res1 = DOSTRUE;
+    }
 }
 
 VOID FS_ActionOpen(
@@ -707,7 +784,7 @@ VOID FS_HandlePacket(
             break;
 
         default:
-            LOG3(vol->v_Fs->fs_Ctx, LOG_ERROR, "%s: Unknown Pkt 0x%lx : Type %d", vol->v_Name, pkt, pkt->dp_Type);
+            LOG3(vol->v_Fs->fs_Ctx, LOG_ERROR, "%s: Unknown Pkt 0x%x : Type %d", vol->v_Name, pkt, (ULONG) pkt->dp_Type);
             pkt->dp_Res1 = DOSFALSE;
             pkt->dp_Res2 = ERROR_ACTION_NOT_KNOWN;
             reply = TRUE;
@@ -720,6 +797,10 @@ VOID FS_HandlePacket(
         switch (pkt->dp_Type) {
         case ACTION_FREE_LOCK:
             FS_ActionFreeLock(vol, pkt);
+            break;
+        case ACTION_DISK_INFO:
+            FS_ActionInfo(vol, pkt);
+            reply = TRUE;
             break;
         default:
             LOG2(vol->v_Fs->fs_Ctx, LOG_INFO, "%s: Action %d while unmounted", vol->v_Name, pkt->dp_Type);
@@ -807,11 +888,11 @@ VOID FS_ActionInfoReply(
     info->id_NumSoftErrors = 0;
     info->id_UnitNumber = vol->v_Id;
     info->id_DiskState = ID_VALIDATED;
-    info->id_DiskType = ID_INTER_FFS_DISK;
+    info->id_DiskType = 0x41504200;     // 'APB\0'
     info->id_VolumeNode = MKBADDR(vol->v_Vol);
     info->id_InUse = DOSFALSE;
 
-    info->id_BytesPerBlock = 512;
+    info->id_BytesPerBlock = *(data++);
     info->id_NumBlocks = *(data++);
     info->id_NumBlocksUsed = *data;
 

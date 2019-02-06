@@ -52,8 +52,10 @@ struct Volume
 {
     struct MinNode v_Node;
     struct ApbFs *v_Fs;
+    STRPTR v_DevName;
     STRPTR v_Name;
 	struct MsgPort *v_Port;
+    struct DevInfo *v_Dev;
     struct DeviceList *v_Vol;
     UWORD v_Id;
 	WORD v_LockCount;
